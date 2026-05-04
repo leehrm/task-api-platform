@@ -2,14 +2,6 @@
 
 FastAPI + PostgreSQL API project for practicing Docker, docker-compose, Kubernetes YAML deployment, and Helm chart packaging.
 
-## Week 1 Goal
-
-- Run FastAPI locally
-- Add `/healthz` endpoint
-- Dockerize the API server
-- Run API + PostgreSQL with docker-compose
-- Practice basic Git workflow
-
 ## Tech Stack
 
 - Python
@@ -125,3 +117,66 @@ Then create a Pull Request on GitHub:
 base: dev
 compare: compare: feature/week1-add-dockerfile
 ```
+
+## Run on Kubernetes with Minikube
+
+Start Minikube.
+
+```bash
+minikube start --driver=docker
+```
+
+Build the API image.
+```bash
+docker build -t task-api:local .
+```
+
+Load the image into Minikube.
+```bash
+minikube image load task-api:local
+```
+
+Enable Ingress addon.
+```Bash
+minikube addons enable ingress
+```
+
+Check that the Ingress controller is running:
+```bash
+kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx
+```
+
+
+Apply Kubernetes manifests.
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/ingress.yaml
+```
+
+Check resources.
+```bash
+kubectl get all -n task-api
+kubectl get ingress -n task-api
+kubectl get endpoints -n task-api task-api
+```
+
+Test with port-forward.
+Use port-forward to expose the Ingress controller locally:
+```bash
+kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
+```
+
+Health check.
+```bash
+curl http://task-api.local:8080/healthz
+```
+
+Expected response:
+```JSON
+{"status":"ok"}
+```
+
+
