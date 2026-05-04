@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: task-api
+  namespace: task-api
+spec:
+  rules:
+    - host: task-api.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: task-api
+                port:
+                  number: 8000
