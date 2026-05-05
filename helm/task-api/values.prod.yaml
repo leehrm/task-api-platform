@@ -1,0 +1,33 @@
+replicaCount: 2
+
+image:
+  repository: task-api
+  tag: stable
+  pullPolicy: IfNotPresent
+
+ingress:
+  enabled: true
+  className: ""
+  hosts:
+    - host: task-api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
