@@ -5,6 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "task-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -14,3 +15,4 @@ spec:
       name: http
   selector:
     {{- include "task-api.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
