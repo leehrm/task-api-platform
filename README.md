@@ -180,3 +180,53 @@ Expected response:
 ```
 
 
+##Helm Deployment
+
+Lint
+```bash
+helm lint ./helm/task-api
+```
+
+Render manifests
+```bash
+helm template task-api ./helm/task-api \
+  -n task-api-dev \
+  -f ./helm/task-api/values.dev.yaml
+```
+Install
+```bash
+helm install task-api ./helm/task-api \
+  -n task-api-dev \
+  --create-namespace \
+  -f ./helm/task-api/values.dev.yaml
+```
+Check resources
+```bash
+helm list -n task-api-dev
+kubectl get all -n task-api-dev
+```
+Test with Service port-forward
+```bash
+kubectl port-forward svc/task-api 8000:8000 -n task-api-dev
+curl http://localhost:8000/healthz
+```
+Test with Ingress Controller port-forward
+```bash
+kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80
+curl -H "Host: task-api.dev.local" http://localhost:8080/healthz
+```
+Upgrade
+```bash
+helm upgrade task-api ./helm/task-api \
+  -n task-api-dev \
+  -f ./helm/task-api/values.dev.yaml
+```
+Rollback
+```bash
+helm history task-api -n task-api-dev
+helm rollback task-api 1 -n task-api-dev
+```
+Uninstall
+```bash
+helm uninstall task-api -n task-api-dev
+```
