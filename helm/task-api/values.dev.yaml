@@ -2,26 +2,56 @@ replicaCount: 1
 
 image:
   repository: task-api
-  tag: local
+  tag: "0.1.0"
   pullPolicy: Never
+
+containerPort: 8000
+
+service:
+  type: ClusterIP
+  port: 8000
+
+env:
+  DB_PORT: "5432"
+  DB_NAME: taskdb
+  DB_USER: taskuser
+
+secretEnv:
+  DB_PASSWORD: taskpass
 
 ingress:
   enabled: true
-  className: ""
+  className: "nginx"
+  annotations: {}
   hosts:
     - host: task-api.dev.local
       paths:
         - path: /
           pathType: Prefix
+  tls: []
+
+postgres:
+  image:
+    repository: postgres
+    tag: "16"
+  service:
+    port: 5432
+  auth:
+    database: taskdb
+    username: taskuser
+    password: taskpass
+  persistence:
+    enabled: true
+    size: 1Gi
 
 livenessProbe:
-  httpGet:
-    path: /healthz
-    port: http
+  path: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
 
 readinessProbe:
-  httpGet:
-    path: /healthz
-    port: http
+  path: /readyz
+  initialDelaySeconds: 10
+  periodSeconds: 10
 
 resources: {}

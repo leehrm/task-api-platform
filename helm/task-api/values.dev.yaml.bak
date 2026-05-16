@@ -1,0 +1,27 @@
+replicaCount: 1
+
+image:
+  repository: task-api
+  tag: local
+  pullPolicy: Never
+
+ingress:
+  enabled: true
+  className: ""
+  hosts:
+    - host: task-api.dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+
+resources: {}
