@@ -1,46 +1,19 @@
-import os
-import psycopg2
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from app.config.database import init_db
+from app.routes.health_routes import router as health_router
+from app.routes.task_routes import router as task_router
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
 
 app = FastAPI(
     title="Task API Platform",
-    version="0.1.0",
+    version="0.2.0",
+    lifespan=lifespan,
 )
 
-@app.get("/healthz")
-def healthz():
-    return {"status": "ok"}
-
-@app.get("/readyz")
-def readyz():
-    try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST", "db"),
-            port=os.getenv("DB_PORT", "5432"),
-            dbname=os.getenv("DB_NAME", "taskdb"),
-            user=os.getenv("DB_USER", "taskuser"),
-            password=os.getenv("DB_PASSWORD", "taskpass"),
-            connect_timeout=3,
-        )
-
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1;")
-            cur.fetchone()
-
-        conn.close()
-
-        return {
-            "status": "ready",
-            "db": "connected",
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "status": "not_ready",
-                "db": "disconnected",
-                "error": str(e),
-            },
-        )
+app.include_router(health_router)
+app.include_router(task_router)
