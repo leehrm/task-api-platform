@@ -5,7 +5,8 @@ metadata:
   labels:
     {{- include "task-api.labels" . | nindent 4 }}
 data:
-  DB_HOST: {{ include "task-api.fullname" . }}-postgres
+  # .Values.env.DB_HOST ("task-api-postgresdb")를 가져오도록 수정
+  DB_HOST: {{ .Values.env.DB_HOST | quote }}
   DB_PORT: {{ .Values.env.DB_PORT | quote }}
   DB_NAME: {{ .Values.env.DB_NAME | quote }}
   DB_USER: {{ .Values.env.DB_USER | quote }}

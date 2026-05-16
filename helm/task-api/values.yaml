@@ -1,5 +1,41 @@
 # Default values for task-api.
 
+internalPostgresql:
+  enabled: false
+
+global:
+  security:
+    allowInsecureImages: true
+
+postgresdb:
+  enabled: true
+
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/postgresql
+    tag: "16"
+
+  auth:
+    database: taskdb
+    username: taskuser
+    password: "taskpass"
+  
+  primary:
+    persistence:
+      enabled: true
+      size: 1Gi
+
+env:
+  DB_HOST: "task-api-postgresdb"
+  DB_PORT: "5432"
+  DB_NAME: "taskdb"
+  DB_USER: "taskuser"
+
+secretEnv:
+  DB_PASSWORD: "taskpass"
+
+containerPort: 8000
+
 replicaCount: 1
 
 image:
@@ -58,14 +94,14 @@ httpRoute:
 resources: {}
 
 livenessProbe:
-  httpGet:
-    path: /healthz
-    port: http
+  path: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
 
 readinessProbe:
-  httpGet:
-    path: /readyz
-    port: http
+  path: /readyz
+  initialDelaySeconds: 10
+  periodSeconds: 10
 
 autoscaling:
   enabled: false
@@ -83,24 +119,24 @@ tolerations: []
 
 affinity: {}
 
-env:
-  DB_PORT: "5432"
-  DB_NAME: taskdb
-  DB_USER: taskuser
+#env:
+#  DB_PORT: "5432"
+#  DB_NAME: taskdb
+#  DB_USER: taskuser
 
-secretEnv:
-  DB_PASSWORD: taskpass
+#secretEnv:
+#  DB_PASSWORD: taskpass
 
-postgres:
-  image:
-    repository: postgres
-    tag: "16"
-  service:
-    port: 5432
-  auth:
-    database: taskdb
-    username: taskuser
-    password: taskpass
-  persistence:
-    enabled: true
-    size: 1Gi
+#postgres:
+#  image:
+#    repository: postgres
+#    tag: "16"
+#  service:
+#    port: 5432
+#  auth:
+#    database: taskdb
+#    username: taskuser
+#    password: taskpass
+#  persistence:
+#    enabled: true
+#    size: 1Gi
