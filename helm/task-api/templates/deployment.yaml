@@ -26,6 +26,10 @@ spec:
               containerPort: {{ .Values.containerPort }}
               protocol: TCP
 
+          env:
+            - name: APP_VERSION
+              value: {{ .Values.appVersion | quote }}
+              
           envFrom:
             - configMapRef:
                 name: {{ include "task-api.fullname" . }}-config

@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from app.services.health_service import get_health_status, get_readiness_status
+from app.services.health_service import get_health_status, get_readiness_status, get_version_status
 
 def healthz():
     return get_health_status()
@@ -16,3 +16,6 @@ def readyz():
                 "error": str(e),
             },
         )
+
+def get_version():
+    return get_version_status()

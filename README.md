@@ -180,7 +180,7 @@ Expected response:
 ```
 
 
-##Helm Deployment
+## Helm Deployment
 
 Lint
 ```bash
