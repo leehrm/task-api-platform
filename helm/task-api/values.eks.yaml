@@ -1,0 +1,134 @@
+# Default values for task-api.
+
+internalPostgresql:
+  enabled: false
+
+global:
+  security:
+    allowInsecureImages: true
+
+postgresdb:
+  enabled: true
+
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/postgresql
+    tag: "16"
+
+  auth:
+    database: taskdb
+    username: taskuser
+    password: "taskpass"
+  
+  primary:
+    persistence:
+      enabled: true
+      size: 1Gi
+
+env:
+  DB_HOST: "task-api-postgresdb"
+  DB_PORT: "5432"
+  DB_NAME: "taskdb"
+  DB_USER: "taskuser"
+
+secretEnv:
+  DB_PASSWORD: "taskpass"
+
+containerPort: 8000
+
+replicaCount: 1
+
+image:
+  repository: 519330023984.dkr.ecr.ap-northeast-1.amazonaws.com/task-api
+  tag: "0.2.1"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+ingress:
+  enabled: false
+
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs:
+    - name: gateway
+      sectionName: http
+  hostnames:
+    - chart-example.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /headers
+
+resources: {}
+
+livenessProbe:
+  path: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  path: /readyz
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+volumes: []
+
+volumeMounts: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+#env:
+#  DB_PORT: "5432"
+#  DB_NAME: taskdb
+#  DB_USER: taskuser
+
+#secretEnv:
+#  DB_PASSWORD: taskpass
+
+#postgres:
+#  image:
+#    repository: postgres
+#    tag: "16"
+#  service:
+#    port: 5432
+#  auth:
+#    database: taskdb
+#    username: taskuser
+#    password: taskpass
+#  persistence:
+#    enabled: true
+#    size: 1Gi
