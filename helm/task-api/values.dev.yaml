@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: task-api
-  tag: "0.1.0"
+  tag: "oop-test"
   pullPolicy: Never
 
 containerPort: 8000
