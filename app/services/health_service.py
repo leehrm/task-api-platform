@@ -1,19 +1,29 @@
-from app.config.database import check_database_connection
 import os
 
-def get_health_status():
-    return {"status": "ok"}
+from app.config.database import Database, database
 
-def get_readiness_status():
-    check_database_connection()
 
-    return {
-        "status": "ready",
-        "db": "connected",
-    }
+class HealthService:
 
-def get_version_status():
-    return {
-        "app": "task-api",
-        "version": os.getenv("APP_VERSION", "local")
-    }
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    def get_health_status(self) -> dict:
+        return {"status": "ok"}
+
+    def get_readiness_status(self) -> dict:
+        self.db.check_connection()
+
+        return {
+            "status": "ready",
+            "db": "connected",
+        }
+
+    def get_version_status(self) -> dict:
+        return {
+            "app": "task-api",
+            "version": os.getenv("APP_VERSION", "local"),
+        }
+
+
+health_service = HealthService(database)
