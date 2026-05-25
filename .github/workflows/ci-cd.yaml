@@ -3,8 +3,13 @@ name: task-api-ci-cd
 on:
   push:
     branches:
-      - feature/week6-cicd
       - main
+    paths:
+      - "app/**"
+      - "Dockerfile"
+      - "requirements.txt"
+      - "helm/**"
+      - ".github/workflows/**"
 
 permissions:
   id-token: write
