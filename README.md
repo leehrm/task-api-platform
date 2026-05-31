@@ -681,3 +681,7 @@ Week 6 작업 완료 후 `feature/week6-cicd`를 `main`으로 PR merge하여, �
 | `deploy/dev` | ArgoCD가 바라보는 dev 환경 배포 브랜치 |
 
 `task-api-platform`의 GitHub Actions는 `gitops-argocd/deploy/dev` 브랜치의 image tag를 수정합니다.
+
+---
+
+readme 수정 테스트
