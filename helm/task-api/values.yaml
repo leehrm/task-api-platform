@@ -10,11 +10,6 @@ global:
 postgresdb:
   enabled: true
 
-  image:
-    registry: public.ecr.aws
-    repository: bitnami/postgresql
-    tag: "16"
-
   auth:
     database: taskdb
     username: taskuser
