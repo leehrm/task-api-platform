@@ -31,8 +31,14 @@ env:
   DB_NAME: "taskdb"
   DB_USER: "taskuser"
 
+  CACHE_ENABLED: "true"
+  CACHE_TTL_SECONDS: "60"
+  REDIS_HOST: "redis-master.redis.svc.cluster.local"
+  REDIS_PORT: "6379"
+    
 secretEnv:
   DB_PASSWORD: "taskpass"
+  REDIS_PASSWORD: "redispass"
 
 containerPort: 8000
 
