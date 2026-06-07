@@ -9,7 +9,9 @@ class TaskRepository:
         self.db = db
 
     def create_task(self, title: str) -> dict:
-        with self.db.get_db_connection() as conn:
+        print("event=db_query target=primary operation=create_task", flush=True)
+
+        with self.db.get_write_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -25,7 +27,9 @@ class TaskRepository:
         return self._row_to_task(row)
 
     def list_tasks(self) -> list[dict]:
-        with self.db.get_db_connection() as conn:
+        print("event=db_query target=replica operation=list_tasks", flush=True)
+
+        with self.db.get_read_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -39,7 +43,12 @@ class TaskRepository:
         return [self._row_to_task(row) for row in rows]
 
     def get_task_by_id(self, task_id: int) -> Optional[dict]:
-        with self.db.get_db_connection() as conn:
+        print(
+            f"event=db_query target=replica operation=get_task_by_id task_id={task_id}",
+            flush=True,
+        )
+
+        with self.db.get_read_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -56,34 +65,44 @@ class TaskRepository:
 
         return self._row_to_task(row)
 
-    def update_task(self, task_id: int, title: str | None = None, done: bool | None = None) -> Optional[dict]:
-        current_task = self.get_task_by_id(task_id)
+    def update_task(
+        self,
+        task_id: int,
+        title: str | None = None,
+        done: bool | None = None,
+    ) -> Optional[dict]:
+        print(
+            f"event=db_query target=primary operation=update_task task_id={task_id}",
+            flush=True,
+        )
 
-        if current_task is None:
-            return None
-
-        new_title = title if title is not None else current_task["title"]
-        new_done = done if done is not None else current_task["done"]
-
-        with self.db.get_db_connection() as conn:
+        with self.db.get_write_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     UPDATE tasks
-                    SET title = %s,
-                        done = %s
+                    SET title = COALESCE(%s, title),
+                        done = COALESCE(%s, done)
                     WHERE id = %s
                     RETURNING id, title, done;
                     """,
-                    (new_title, new_done, task_id),
+                    (title, done, task_id),
                 )
                 row = cur.fetchone()
             conn.commit()
 
+        if row is None:
+            return None
+
         return self._row_to_task(row)
 
     def delete_task(self, task_id: int) -> bool:
-        with self.db.get_db_connection() as conn:
+        print(
+            f"event=db_query target=primary operation=delete_task task_id={task_id}",
+            flush=True,
+        )
+
+        with self.db.get_write_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -105,5 +124,6 @@ class TaskRepository:
             "title": row[1],
             "done": row[2],
         }
+
 
 task_repository = TaskRepository(database)
