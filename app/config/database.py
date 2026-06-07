@@ -1,39 +1,116 @@
 import os
 from contextlib import contextmanager
-from typing import Generator
+from typing import Generator, Literal
 
 import psycopg2
 from psycopg2.extensions import connection as PsycopgConnection
 
 
+DatabaseTarget = Literal["primary", "replica"]
+
+
 class Database:
 
-    def get_connection(self) -> PsycopgConnection:
-        return psycopg2.connect(
-            host=os.getenv("DB_HOST", "db"),
-            port=os.getenv("DB_PORT", "5432"),
-            dbname=os.getenv("DB_NAME", "taskdb"),
-            user=os.getenv("DB_USER", "taskuser"),
-            password=os.getenv("DB_PASSWORD", "taskpass"),
-            connect_timeout=3,
+    def _get_common_connection_kwargs(self) -> dict:
+        return {
+            "port": os.getenv("DB_PORT", "5432"),
+            "dbname": os.getenv("DB_NAME", "taskdb"),
+            "user": os.getenv("DB_USER", "taskuser"),
+            "password": os.getenv("DB_PASSWORD", "taskpass"),
+            "connect_timeout": 3,
+        }
+
+    def get_write_connection(self) -> PsycopgConnection:
+        """
+        Write 전용 연결.
+        POST/PATCH/DELETE/init_db는 반드시 Primary를 사용.
+        """
+        host = (
+            os.getenv("DB_PRIMARY_HOST")
+            or os.getenv("DB_HOST")
+            or "db"
         )
 
+        return psycopg2.connect(
+            host=host,
+            **self._get_common_connection_kwargs(),
+        )
+
+    def get_read_connection(self) -> PsycopgConnection:
+        """
+        Read 전용 연결.
+        DB_READ_HOST가 있으면 Read Replica를 사용하고,
+        없으면 Primary/DB_HOST로 fallback.
+        """
+        host = (
+            os.getenv("DB_READ_HOST")
+            or os.getenv("DB_PRIMARY_HOST")
+            or os.getenv("DB_HOST")
+            or "db"
+        )
+
+        return psycopg2.connect(
+            host=host,
+            **self._get_common_connection_kwargs(),
+        )
+
+    def get_connection(self) -> PsycopgConnection:
+        """
+        기존 코드 호환.
+        기본 연결은 write connection으로 둔다.
+        """
+        return self.get_write_connection()
+
     @contextmanager
-    def get_db_connection(self) -> Generator[PsycopgConnection, None, None]:
-        conn = self.get_connection()
+    def get_write_db_connection(self) -> Generator[PsycopgConnection, None, None]:
+        conn = self.get_write_connection()
         try:
             yield conn
         finally:
             conn.close()
 
+    @contextmanager
+    def get_read_db_connection(self) -> Generator[PsycopgConnection, None, None]:
+        conn = self.get_read_connection()
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    @contextmanager
+    def get_db_connection(self) -> Generator[PsycopgConnection, None, None]:
+        """
+        기존 코드 호환.
+        명시하지 않은 DB 작업은 Primary로 보냄.
+        """
+        with self.get_write_db_connection() as conn:
+            yield conn
+
     def check_connection(self) -> None:
-        with self.get_db_connection() as conn:
+        """
+        readiness check는 기본적으로 Primary 연결을 확인.
+        """
+        with self.get_write_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+                cur.fetchone()
+
+    def check_read_connection(self) -> None:
+        """
+        Read Replica 연결 확인.
+        """
+        with self.get_read_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1;")
                 cur.fetchone()
 
     def init_db(self) -> None:
-        with self.get_db_connection() as conn:
+        """
+        테이블 생성은 write 작업이므로 반드시 Primary에서 실행.
+        """
+        print("event=db_query target=primary operation=init_db", flush=True)
+
+        with self.get_write_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -46,5 +123,5 @@ class Database:
                 )
             conn.commit()
 
-# database object
+
 database = Database()

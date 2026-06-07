@@ -27,6 +27,8 @@ postgresdb:
 
 env:
   DB_HOST: "task-api-postgresdb"
+  DB_PRIMARY_HOST: "task-api-postgresdb"
+  DB_READ_HOST: "task-api-postgresdb"
   DB_PORT: "5432"
   DB_NAME: "taskdb"
   DB_USER: "taskuser"
