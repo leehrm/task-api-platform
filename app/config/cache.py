@@ -4,6 +4,8 @@ from typing import Any
 
 import redis
 
+from app.metrics import CACHE_HIT_TOTAL, CACHE_MISS_TOTAL
+
 
 class Cache:
     def __init__(self) -> None:
@@ -32,9 +34,11 @@ class Cache:
             value = self.client.get(key)
 
             if value is None:
+                CACHE_MISS_TOTAL.inc()
                 print(f"event=cache_lookup key={key} result=miss", flush=True)
                 return None
 
+            CACHE_HIT_TOTAL.inc()
             print(f"event=cache_lookup key={key} result=hit", flush=True)
             return json.loads(value)
 
