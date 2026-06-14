@@ -1,6 +1,7 @@
 from typing import Optional
 
 from app.config.database import Database, database
+from app.metrics import DB_QUERY_LATENCY_SECONDS
 
 
 class TaskRepository:
@@ -11,34 +12,42 @@ class TaskRepository:
     def create_task(self, title: str) -> dict:
         print("event=db_query target=primary operation=create_task", flush=True)
 
-        with self.db.get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO tasks (title)
-                    VALUES (%s)
-                    RETURNING id, title, done;
-                    """,
-                    (title,),
-                )
-                row = cur.fetchone()
-            conn.commit()
+        with DB_QUERY_LATENCY_SECONDS.labels(
+            operation="create_task",
+            target="primary",
+        ).time():
+            with self.db.get_write_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO tasks (title)
+                        VALUES (%s)
+                        RETURNING id, title, done;
+                        """,
+                        (title,),
+                    )
+                    row = cur.fetchone()
+                conn.commit()
 
         return self._row_to_task(row)
 
     def list_tasks(self) -> list[dict]:
         print("event=db_query target=replica operation=list_tasks", flush=True)
 
-        with self.db.get_read_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, title, done
-                    FROM tasks
-                    ORDER BY id;
-                    """
-                )
-                rows = cur.fetchall()
+        with DB_QUERY_LATENCY_SECONDS.labels(
+            operation="list_tasks",
+            target="replica",
+        ).time():
+            with self.db.get_read_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, title, done
+                        FROM tasks
+                        ORDER BY id;
+                        """
+                    )
+                    rows = cur.fetchall()
 
         return [self._row_to_task(row) for row in rows]
 
@@ -48,17 +57,21 @@ class TaskRepository:
             flush=True,
         )
 
-        with self.db.get_read_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, title, done
-                    FROM tasks
-                    WHERE id = %s;
-                    """,
-                    (task_id,),
-                )
-                row = cur.fetchone()
+        with DB_QUERY_LATENCY_SECONDS.labels(
+            operation="get_task_by_id",
+            target="replica",
+        ).time():
+            with self.db.get_read_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, title, done
+                        FROM tasks
+                        WHERE id = %s;
+                        """,
+                        (task_id,),
+                    )
+                    row = cur.fetchone()
 
         if row is None:
             return None
@@ -76,20 +89,24 @@ class TaskRepository:
             flush=True,
         )
 
-        with self.db.get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE tasks
-                    SET title = COALESCE(%s, title),
-                        done = COALESCE(%s, done)
-                    WHERE id = %s
-                    RETURNING id, title, done;
-                    """,
-                    (title, done, task_id),
-                )
-                row = cur.fetchone()
-            conn.commit()
+        with DB_QUERY_LATENCY_SECONDS.labels(
+            operation="update_task",
+            target="primary",
+        ).time():
+            with self.db.get_write_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE tasks
+                        SET title = COALESCE(%s, title),
+                            done = COALESCE(%s, done)
+                        WHERE id = %s
+                        RETURNING id, title, done;
+                        """,
+                        (title, done, task_id),
+                    )
+                    row = cur.fetchone()
+                conn.commit()
 
         if row is None:
             return None
@@ -102,18 +119,22 @@ class TaskRepository:
             flush=True,
         )
 
-        with self.db.get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    DELETE FROM tasks
-                    WHERE id = %s
-                    RETURNING id;
-                    """,
-                    (task_id,),
-                )
-                row = cur.fetchone()
-            conn.commit()
+        with DB_QUERY_LATENCY_SECONDS.labels(
+            operation="delete_task",
+            target="primary",
+        ).time():
+            with self.db.get_write_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        DELETE FROM tasks
+                        WHERE id = %s
+                        RETURNING id;
+                        """,
+                        (task_id,),
+                    )
+                    row = cur.fetchone()
+                conn.commit()
 
         return row is not None
 
