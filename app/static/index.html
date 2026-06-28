@@ -16,6 +16,7 @@
       --bad: #ef4444;
       --line: #374151;
       --accent: #38bdf8;
+      --accent-dark: #0284c7;
     }
 
     * {
@@ -88,6 +89,7 @@
       font-size: 26px;
       font-weight: 700;
       margin: 8px 0;
+      word-break: break-word;
     }
 
     .muted {
@@ -133,11 +135,35 @@
       background: var(--accent);
       font-weight: 700;
       cursor: pointer;
+      transition: transform 0.08s ease, background 0.12s ease;
+    }
+
+    button:hover {
+      background: var(--accent-dark);
+      color: white;
+    }
+
+    button:active {
+      transform: translateY(1px);
     }
 
     button.secondary {
       color: var(--text);
       background: var(--card2);
+    }
+
+    button.secondary:hover {
+      background: #374151;
+    }
+
+    button.danger {
+      color: white;
+      background: #991b1b;
+      border-color: #7f1d1d;
+    }
+
+    button.danger:hover {
+      background: #b91c1c;
     }
 
     pre {
@@ -152,6 +178,10 @@
       overflow: auto;
     }
 
+    code {
+      color: #bae6fd;
+    }
+
     .tasks {
       display: grid;
       gap: 10px;
@@ -161,6 +191,7 @@
     .task {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       gap: 12px;
       padding: 12px;
       border: 1px solid var(--line);
@@ -168,8 +199,54 @@
       background: rgba(31, 41, 55, 0.6);
     }
 
+    .task-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .task-title.done {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+
     .task small {
       color: var(--muted);
+    }
+
+    .task-status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--line);
+    }
+
+    .task-status.done {
+      color: var(--ok);
+      background: rgba(34, 197, 94, 0.08);
+      border-color: rgba(34, 197, 94, 0.35);
+    }
+
+    .task-status.todo {
+      color: var(--warn);
+      background: rgba(245, 158, 11, 0.08);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+
+    .task-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .footer-note {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
     }
 
     @media (max-width: 860px) {
@@ -184,6 +261,15 @@
       input {
         width: 100%;
       }
+
+      .task {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .task-controls {
+        justify-content: flex-start;
+      }
     }
   </style>
 </head>
@@ -194,7 +280,7 @@
       <h1>Task API Platform</h1>
       <p class="subtitle">
         Kubernetes, ArgoCD, Traefik, cert-manager, Let&apos;s Encrypt, Prometheus, Loki 기반으로 배포된 실습용 Task API입니다.
-        이 페이지는 API가 외부 HTTPS endpoint로 정상 노출되는지 확인하기 위한 간단한 프론트엔드입니다.
+        이 페이지는 외부 HTTPS endpoint, API backend 연결, Task 생성/완료/삭제 기능을 간단히 확인하기 위한 프론트엔드입니다.
       </p>
     </section>
 
@@ -208,30 +294,36 @@
       <div class="card">
         <h2>Health</h2>
         <div class="value" id="healthStatus">checking...</div>
-        <div class="muted">GET /healthz 결과입니다.</div>
+        <div class="muted">GET <code>/healthz</code> 결과입니다.</div>
       </div>
 
       <div class="card">
         <h2>Readiness</h2>
         <div class="value" id="readyStatus">checking...</div>
-        <div class="muted">GET /readyz 결과입니다.</div>
+        <div class="muted">GET <code>/readyz</code> 결과입니다.</div>
       </div>
     </section>
 
     <section class="card">
       <h2>Task API Test</h2>
       <p class="muted">
-        아래 버튼은 같은 origin의 <code>/tasks</code> API를 호출합니다.
+        아래 기능은 같은 origin의 <code>/tasks</code>, <code>/tasks/{id}</code> API를 호출합니다.
       </p>
 
       <div class="actions">
         <input id="taskTitle" placeholder="새 task 제목 입력" />
-        <button onclick="createTask()">Create Task</button>
-        <button class="secondary" onclick="loadTasks()">Refresh Tasks</button>
-        <button class="secondary" onclick="checkHealth()">Check Health</button>
+        <button id="createTaskButton">Create Task</button>
+        <button class="secondary" id="refreshTasksButton">Refresh Tasks</button>
+        <button class="secondary" id="checkHealthButton">Check Health</button>
       </div>
 
-      <div id="taskList" class="tasks"></div>
+      <div id="taskList" class="tasks">
+        <div class="muted">Loading tasks...</div>
+      </div>
+
+      <div class="footer-note">
+        완료 버튼은 <code>PATCH /tasks/{id}</code>를 호출하고, 삭제 버튼은 <code>DELETE /tasks/{id}</code>를 호출합니다.
+      </div>
     </section>
 
     <section class="card" style="margin-top: 16px;">
@@ -246,8 +338,23 @@
     const readyStatusEl = document.getElementById("readyStatus");
     const outputEl = document.getElementById("output");
     const taskListEl = document.getElementById("taskList");
+    const taskTitleEl = document.getElementById("taskTitle");
+
+    const createTaskButton = document.getElementById("createTaskButton");
+    const refreshTasksButton = document.getElementById("refreshTasksButton");
+    const checkHealthButton = document.getElementById("checkHealthButton");
 
     endpointEl.textContent = window.location.origin;
+
+    createTaskButton.addEventListener("click", createTask);
+    refreshTasksButton.addEventListener("click", loadTasks);
+    checkHealthButton.addEventListener("click", checkHealth);
+
+    taskTitleEl.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        createTask();
+      }
+    });
 
     function print(data) {
       outputEl.textContent = typeof data === "string"
@@ -305,6 +412,8 @@
 
     async function loadTasks() {
       try {
+        taskListEl.innerHTML = `<div class="muted">Loading tasks...</div>`;
+
         const result = await request("/tasks");
         print(result);
 
@@ -320,23 +429,66 @@
           return;
         }
 
-        taskListEl.innerHTML = tasks.map(task => `
-          <div class="task">
-            <div>
-              <strong>${escapeHtml(task.title)}</strong><br />
-              <small>ID: ${task.id}</small>
-            </div>
-            <div>${task.done ? "Done" : "Todo"}</div>
-          </div>
-        `).join("");
+        renderTasks(tasks);
       } catch (error) {
+        taskListEl.innerHTML = `<div class="muted">Failed to load tasks.</div>`;
         print(String(error));
       }
     }
 
+    function renderTasks(tasks) {
+      taskListEl.innerHTML = "";
+
+      tasks.forEach((task) => {
+        const taskEl = document.createElement("div");
+        taskEl.className = "task";
+
+        const leftEl = document.createElement("div");
+
+        const titleEl = document.createElement("div");
+        titleEl.className = task.done ? "task-title done" : "task-title";
+        titleEl.textContent = task.title;
+
+        const idEl = document.createElement("small");
+        idEl.textContent = `ID: ${task.id}`;
+
+        leftEl.appendChild(titleEl);
+        leftEl.appendChild(idEl);
+
+        const controlsEl = document.createElement("div");
+        controlsEl.className = "task-controls";
+
+        const statusEl = document.createElement("span");
+        statusEl.className = task.done ? "task-status done" : "task-status todo";
+        statusEl.textContent = task.done ? "Done" : "Todo";
+
+        const toggleButton = document.createElement("button");
+        toggleButton.className = "secondary";
+        toggleButton.textContent = task.done ? "Mark Todo" : "Mark Done";
+        toggleButton.addEventListener("click", function () {
+          toggleTaskDone(task.id, task.done);
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "danger";
+        deleteButton.textContent = "Delete";
+        deleteButton.addEventListener("click", function () {
+          deleteTask(task.id);
+        });
+
+        controlsEl.appendChild(statusEl);
+        controlsEl.appendChild(toggleButton);
+        controlsEl.appendChild(deleteButton);
+
+        taskEl.appendChild(leftEl);
+        taskEl.appendChild(controlsEl);
+
+        taskListEl.appendChild(taskEl);
+      });
+    }
+
     async function createTask() {
-      const input = document.getElementById("taskTitle");
-      const title = input.value.trim();
+      const title = taskTitleEl.value.trim();
 
       if (!title) {
         print("Task title is required.");
@@ -352,7 +504,7 @@
         print(result);
 
         if (result.ok) {
-          input.value = "";
+          taskTitleEl.value = "";
           await loadTasks();
         }
       } catch (error) {
@@ -360,13 +512,45 @@
       }
     }
 
-    function escapeHtml(value) {
-      return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+    async function toggleTaskDone(taskId, currentDone) {
+      try {
+        const result = await request(`/tasks/${taskId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            done: !currentDone
+          })
+        });
+
+        print(result);
+
+        if (result.ok) {
+          await loadTasks();
+        }
+      } catch (error) {
+        print(String(error));
+      }
+    }
+
+    async function deleteTask(taskId) {
+      const confirmed = window.confirm(`Task ${taskId}를 삭제할까요?`);
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        const result = await request(`/tasks/${taskId}`, {
+          method: "DELETE"
+        });
+
+        print(result);
+
+        if (result.ok || result.status === 204) {
+          await loadTasks();
+        }
+      } catch (error) {
+        print(String(error));
+      }
     }
 
     checkHealth();
