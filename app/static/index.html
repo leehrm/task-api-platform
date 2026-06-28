@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Task API Platform</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --card2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+      --line: #374151;
+      --accent: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #111827 50%, #020617 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 20px;
+    }
+
+    .hero {
+      margin-bottom: 28px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.08);
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 42px;
+      letter-spacing: -0.04em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+      max-width: 760px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.86);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .value {
+      font-size: 26px;
+      font-weight: 700;
+      margin: 8px 0;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .status-ok {
+      color: var(--ok);
+    }
+
+    .status-warn {
+      color: var(--warn);
+    }
+
+    .status-bad {
+      color: var(--bad);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    button, input {
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 11px 13px;
+      font-size: 14px;
+    }
+
+    input {
+      min-width: 260px;
+      color: var(--text);
+      background: var(--card2);
+    }
+
+    button {
+      color: #020617;
+      background: var(--accent);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      color: var(--text);
+      background: var(--card2);
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #020617;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      color: #d1d5db;
+      min-height: 120px;
+      overflow: auto;
+    }
+
+    .tasks {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .task {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(31, 41, 55, 0.6);
+    }
+
+    .task small {
+      color: var(--muted);
+    }
+
+    @media (max-width: 860px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 34px;
+      }
+
+      input {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="badge">Week 11 · Traefik + HTTPS + Rate Limit</div>
+      <h1>Task API Platform</h1>
+      <p class="subtitle">
+        Kubernetes, ArgoCD, Traefik, cert-manager, Let&apos;s Encrypt, Prometheus, Loki 기반으로 배포된 실습용 Task API입니다.
+        이 페이지는 API가 외부 HTTPS endpoint로 정상 노출되는지 확인하기 위한 간단한 프론트엔드입니다.
+      </p>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>Endpoint</h2>
+        <div class="value" id="endpoint">-</div>
+        <div class="muted">현재 브라우저가 접속한 외부 주소입니다.</div>
+      </div>
+
+      <div class="card">
+        <h2>Health</h2>
+        <div class="value" id="healthStatus">checking...</div>
+        <div class="muted">GET /healthz 결과입니다.</div>
+      </div>
+
+      <div class="card">
+        <h2>Readiness</h2>
+        <div class="value" id="readyStatus">checking...</div>
+        <div class="muted">GET /readyz 결과입니다.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Task API Test</h2>
+      <p class="muted">
+        아래 버튼은 같은 origin의 <code>/tasks</code> API를 호출합니다.
+      </p>
+
+      <div class="actions">
+        <input id="taskTitle" placeholder="새 task 제목 입력" />
+        <button onclick="createTask()">Create Task</button>
+        <button class="secondary" onclick="loadTasks()">Refresh Tasks</button>
+        <button class="secondary" onclick="checkHealth()">Check Health</button>
+      </div>
+
+      <div id="taskList" class="tasks"></div>
+    </section>
+
+    <section class="card" style="margin-top: 16px;">
+      <h2>Last API Response</h2>
+      <pre id="output">waiting...</pre>
+    </section>
+  </main>
+
+  <script>
+    const endpointEl = document.getElementById("endpoint");
+    const healthStatusEl = document.getElementById("healthStatus");
+    const readyStatusEl = document.getElementById("readyStatus");
+    const outputEl = document.getElementById("output");
+    const taskListEl = document.getElementById("taskList");
+
+    endpointEl.textContent = window.location.origin;
+
+    function print(data) {
+      outputEl.textContent = typeof data === "string"
+        ? data
+        : JSON.stringify(data, null, 2);
+    }
+
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        },
+        ...options
+      });
+
+      const text = await response.text();
+      let body = text;
+
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch (_) {
+        body = text;
+      }
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        body
+      };
+    }
+
+    async function checkHealth() {
+      try {
+        const health = await request("/healthz");
+        healthStatusEl.textContent = health.ok ? "OK" : `FAIL ${health.status}`;
+        healthStatusEl.className = health.ok ? "value status-ok" : "value status-bad";
+
+        const ready = await request("/readyz");
+        readyStatusEl.textContent = ready.ok ? "READY" : `FAIL ${ready.status}`;
+        readyStatusEl.className = ready.ok ? "value status-ok" : "value status-bad";
+
+        print({
+          healthz: health,
+          readyz: ready
+        });
+      } catch (error) {
+        healthStatusEl.textContent = "ERROR";
+        readyStatusEl.textContent = "ERROR";
+        healthStatusEl.className = "value status-bad";
+        readyStatusEl.className = "value status-bad";
+        print(String(error));
+      }
+    }
+
+    async function loadTasks() {
+      try {
+        const result = await request("/tasks");
+        print(result);
+
+        if (!result.ok) {
+          taskListEl.innerHTML = `<div class="muted">Failed to load tasks. HTTP ${result.status}</div>`;
+          return;
+        }
+
+        const tasks = Array.isArray(result.body) ? result.body : [];
+
+        if (tasks.length === 0) {
+          taskListEl.innerHTML = `<div class="muted">No tasks yet.</div>`;
+          return;
+        }
+
+        taskListEl.innerHTML = tasks.map(task => `
+          <div class="task">
+            <div>
+              <strong>${escapeHtml(task.title)}</strong><br />
+              <small>ID: ${task.id}</small>
+            </div>
+            <div>${task.done ? "Done" : "Todo"}</div>
+          </div>
+        `).join("");
+      } catch (error) {
+        print(String(error));
+      }
+    }
+
+    async function createTask() {
+      const input = document.getElementById("taskTitle");
+      const title = input.value.trim();
+
+      if (!title) {
+        print("Task title is required.");
+        return;
+      }
+
+      try {
+        const result = await request("/tasks", {
+          method: "POST",
+          body: JSON.stringify({ title })
+        });
+
+        print(result);
+
+        if (result.ok) {
+          input.value = "";
+          await loadTasks();
+        }
+      } catch (error) {
+        print(String(error));
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    checkHealth();
+    loadTasks();
+  </script>
+</body>
+</html>
