@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from app.services.health_service import HealthService, health_service
 
@@ -27,6 +27,14 @@ class HealthController:
 
     def get_version(self):
         return self.service.get_version_status()
+
+    def drain(self, request: Request):
+        client_host = request.client.host if request.client else ""
+
+        if client_host not in {"127.0.0.1", "::1"}:
+            raise HTTPException(status_code=403, detail="drain is local-only")
+
+        return self.service.start_draining("pre_stop")
 
 
 health_controller = HealthController(health_service)

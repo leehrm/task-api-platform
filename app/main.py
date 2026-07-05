@@ -9,6 +9,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import FileResponse, Response
 
 from app.config.database import database
+from app.lifecycle import lifecycle_state
 from app.metrics import HTTP_REQUEST_TOTAL, HTTP_REQUEST_DURATION_SECONDS
 from app.routes.health_routes import router as health_router
 from app.routes.task_routes import router as task_router
@@ -21,8 +22,24 @@ STATIC_DIR = BASE_DIR / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print(
+        f"event=app_start pod={lifecycle_state.pod_name} version=0.4.0",
+        flush=True,
+    )
     database.init_db()
-    yield
+    try:
+        yield
+    finally:
+        lifecycle_state.mark_draining("lifespan_shutdown")
+        print(
+            f"event=app_shutdown_start pod={lifecycle_state.pod_name}",
+            flush=True,
+        )
+        database.shutdown()
+        print(
+            f"event=app_shutdown_complete pod={lifecycle_state.pod_name}",
+            flush=True,
+        )
 
 
 app = FastAPI(
