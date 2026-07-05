@@ -91,21 +91,53 @@ httpRoute:
 
 resources: {}
 
+terminationGracePeriodSeconds: 45
+
+lifecycle:
+  preStop:
+    enabled: true
+    command:
+      - /bin/sh
+      - -c
+      - |
+        python - <<'PY'
+        import time
+        import urllib.request
+
+        request = urllib.request.Request(
+            "http://127.0.0.1:8000/internal/drain",
+            method="POST",
+        )
+
+        try:
+            urllib.request.urlopen(request, timeout=2).read()
+        except Exception as exc:
+            print(f"event=pre_stop_drain_failed error={exc}", flush=True)
+
+        time.sleep(10)
+        PY
+
 livenessProbe:
   path: /healthz
   initialDelaySeconds: 5
   periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
 
 readinessProbe:
   path: /readyz
   initialDelaySeconds: 10
-  periodSeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 1
+  successThreshold: 1
 
 autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 100
   targetCPUUtilizationPercentage: 80
+  behavior: {}
 
 volumes: []
 
@@ -116,25 +148,3 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
-
-#env:
-#  DB_PORT: "5432"
-#  DB_NAME: taskdb
-#  DB_USER: taskuser
-
-#secretEnv:
-#  DB_PASSWORD: taskpass
-
-#postgres:
-#  image:
-#    repository: postgres
-#    tag: "16"
-#  service:
-#    port: 5432
-#  auth:
-#    database: taskdb
-#    username: taskuser
-#    password: taskpass
-#  persistence:
-#    enabled: true
-#    size: 1Gi
