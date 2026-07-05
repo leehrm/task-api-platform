@@ -1,6 +1,7 @@
 import os
 
 from app.config.database import Database, database
+from app.lifecycle import lifecycle_state
 
 
 class HealthService:
@@ -9,14 +10,28 @@ class HealthService:
         self.db = db
 
     def get_health_status(self) -> dict:
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            **lifecycle_state.status(),
+        }
 
     def get_readiness_status(self) -> dict:
+        if lifecycle_state.draining:
+            raise RuntimeError("pod is draining")
+
         self.db.check_connection()
 
         return {
             "status": "ready",
             "db": "connected",
+            **lifecycle_state.status(),
+        }
+
+    def start_draining(self, reason: str) -> dict:
+        lifecycle_state.mark_draining(reason)
+        return {
+            "status": "draining",
+            **lifecycle_state.status(),
         }
 
     def get_version_status(self) -> dict:

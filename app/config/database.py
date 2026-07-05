@@ -12,11 +12,18 @@ DatabaseTarget = Literal["primary", "replica"]
 class Database:
 
     def _get_common_connection_kwargs(self) -> dict:
+        pod_name = os.getenv("POD_NAME") or os.getenv("HOSTNAME") or "unknown"
+        application_name = (
+            os.getenv("DB_APPLICATION_NAME")
+            or f"task-api:{pod_name}"
+        )
+
         return {
             "port": os.getenv("DB_PORT", "5432"),
             "dbname": os.getenv("DB_NAME", "taskdb"),
             "user": os.getenv("DB_USER", "taskuser"),
             "password": os.getenv("DB_PASSWORD", "taskpass"),
+            "application_name": application_name,
             "connect_timeout": 3,
         }
 
@@ -122,6 +129,13 @@ class Database:
                     """
                 )
             conn.commit()
+
+    def shutdown(self) -> None:
+        """
+        현재 구현은 요청마다 DB connection을 열고 context manager에서 닫음.
+        별도 pool은 없지만 shutdown 시점 관측을 위해 로그를 남김.
+        """
+        print("event=db_shutdown connection_model=per_request", flush=True)
 
 
 database = Database()
