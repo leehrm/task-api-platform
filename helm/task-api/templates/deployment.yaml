@@ -55,7 +55,11 @@ spec:
             - configMapRef:
                 name: {{ include "task-api.fullname" . }}-config
             - secretRef:
+              {{- if .Values.secret.create }}
                 name: {{ include "task-api.fullname" . }}-secret
+              {{- else }}
+                name: {{ .Values.secret.existingSecret }}
+              {{- end }}
 
           {{- if .Values.lifecycle.preStop.enabled }}
           lifecycle:

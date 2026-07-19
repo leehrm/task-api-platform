@@ -5,6 +5,10 @@ image:
   tag: stable
   pullPolicy: IfNotPresent
 
+secret:
+  create: true
+  existingSecret: ""
+
 ingress:
   enabled: true
   className: ""

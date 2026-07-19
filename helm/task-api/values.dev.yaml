@@ -19,6 +19,10 @@ env:
 secretEnv:
   DB_PASSWORD: taskpass
 
+secret:
+  create: true
+  existingSecret: ""
+
 ingress:
   enabled: true
   className: "nginx"

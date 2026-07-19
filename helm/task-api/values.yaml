@@ -42,6 +42,10 @@ secretEnv:
   DB_PASSWORD: "taskpass"
   REDIS_PASSWORD: "redispass"
 
+secret:
+  create: true
+  existingSecret: ""
+
 containerPort: 8000
 
 replicaCount: 1
