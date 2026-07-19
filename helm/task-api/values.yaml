@@ -39,8 +39,8 @@ env:
   REDIS_PORT: "6379"
 
 secretEnv:
-  DB_PASSWORD: "taskpass"
-  REDIS_PASSWORD: "redispass"
+  DB_PASSWORD: "REPLACE_ME"
+  REDIS_PASSWORD: "REPLACE_ME"
 
 secret:
   create: true
