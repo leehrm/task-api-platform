@@ -39,6 +39,7 @@ env:
   REDIS_PORT: "6379"
 
 secretEnv:
+  # Legacy mode only: replace these placeholders before deployment.
   DB_PASSWORD: "REPLACE_ME"
   REDIS_PASSWORD: "REPLACE_ME"
 

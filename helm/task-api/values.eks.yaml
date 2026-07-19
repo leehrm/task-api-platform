@@ -36,13 +36,9 @@ env:
   REDIS_HOST: "redis-master.redis.svc.cluster.local"
   REDIS_PORT: "6379"
     
-secretEnv:
-  DB_PASSWORD: "taskpass"
-  REDIS_PASSWORD: "redispass"
-
 secret:
-  create: true
-  existingSecret: ""
+  create: false
+  existingSecret: task-api-runtime-secrets
 
 containerPort: 8000
 
