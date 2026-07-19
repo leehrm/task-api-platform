@@ -17,7 +17,7 @@ env:
   DB_USER: taskuser
 
 secretEnv:
-  DB_PASSWORD: taskpass
+  DB_PASSWORD: REPLACE_ME
 
 secret:
   create: true
