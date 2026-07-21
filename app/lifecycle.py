@@ -1,6 +1,10 @@
 import os
 import socket
 import time
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class AppLifecycleState:
@@ -18,10 +22,7 @@ class AppLifecycleState:
         self.draining = True
         self.drain_reason = reason
         self.draining_since = time.time()
-        print(
-            f"event=draining_started pod={self.pod_name} reason={reason}",
-            flush=True,
-        )
+        logger.info("event=draining_started pod=%s reason=%s", self.pod_name, reason)
 
     def status(self) -> dict:
         return {

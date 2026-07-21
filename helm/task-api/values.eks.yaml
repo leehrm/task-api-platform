@@ -30,19 +30,21 @@ env:
   DB_PORT: "5432"
   DB_NAME: "taskdb"
   DB_USER: "taskuser"
+  APP_ENV: "dev"
 
   CACHE_ENABLED: "true"
   CACHE_TTL_SECONDS: "60"
   REDIS_HOST: "redis-master.redis.svc.cluster.local"
   REDIS_PORT: "6379"
-    
-secretEnv:
-  DB_PASSWORD: "taskpass"
-  REDIS_PASSWORD: "redispass"
 
+  OTEL_SERVICE_NAME: "task-api"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://opentelemetry-collector.tracing.svc.cluster.local:4317"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+  OTEL_TRACES_SAMPLER: "parentbased_always_on"
+    
 secret:
-  create: true
-  existingSecret: ""
+  create: false
+  existingSecret: task-api-runtime-secrets
 
 containerPort: 8000
 

@@ -1,10 +1,16 @@
 import json
+import logging
 import os
 from typing import Any
 
 import redis
 
 from app.metrics import CACHE_HIT_TOTAL, CACHE_MISS_TOTAL
+from app.observability import get_tracer
+from opentelemetry.trace import Status, StatusCode
+
+
+logger = logging.getLogger(__name__)
 
 
 class Cache:
@@ -27,24 +33,33 @@ class Cache:
 
     def get(self, key: str) -> Any | None:
         if not self.enabled:
-            print(f"event=cache_skip key={key} reason=disabled", flush=True)
+            logger.info("event=cache_skip key_pattern=%s reason=disabled", self._key_pattern(key))
             return None
 
-        try:
-            value = self.client.get(key)
+        with get_tracer().start_as_current_span("task.cache.get") as span:
+            self._set_common_attributes(span, "get", key)
+            try:
+                value = self.client.get(key)
 
-            if value is None:
-                CACHE_MISS_TOTAL.inc()
-                print(f"event=cache_lookup key={key} result=miss", flush=True)
+                if value is None:
+                    CACHE_MISS_TOTAL.inc()
+                    span.set_attribute("cache.hit", False)
+                    span.set_attribute("cache.result", "miss")
+                    logger.info("event=cache_lookup key_pattern=%s result=miss", self._key_pattern(key))
+                    return None
+
+                CACHE_HIT_TOTAL.inc()
+                span.set_attribute("cache.hit", True)
+                span.set_attribute("cache.result", "hit")
+                logger.info("event=cache_lookup key_pattern=%s result=hit", self._key_pattern(key))
+                return json.loads(value)
+
+            except Exception as exc:
+                span.set_attribute("cache.result", "error")
+                span.record_exception(exc)
+                span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
+                logger.exception("event=cache_error action=get key_pattern=%s", self._key_pattern(key))
                 return None
-
-            CACHE_HIT_TOTAL.inc()
-            print(f"event=cache_lookup key={key} result=hit", flush=True)
-            return json.loads(value)
-
-        except Exception as e:
-            print(f"event=cache_error action=get key={key} error={e}", flush=True)
-            return None
 
     def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
         if not self.enabled:
@@ -52,23 +67,38 @@ class Cache:
 
         ttl = ttl_seconds or self.ttl_seconds
 
-        try:
-            self.client.setex(key, ttl, json.dumps(value))
-            print(f"event=cache_set key={key} ttl={ttl}", flush=True)
-
-        except Exception as e:
-            print(f"event=cache_error action=set key={key} error={e}", flush=True)
+        with get_tracer().start_as_current_span("task.cache.set") as span:
+            self._set_common_attributes(span, "set", key)
+            try:
+                self.client.setex(key, ttl, json.dumps(value))
+                logger.info("event=cache_set key_pattern=%s ttl=%s", self._key_pattern(key), ttl)
+            except Exception as exc:
+                span.record_exception(exc)
+                span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
+                logger.exception("event=cache_error action=set key_pattern=%s", self._key_pattern(key))
 
     def delete(self, *keys: str) -> None:
         if not self.enabled or not keys:
             return
 
-        try:
-            deleted = self.client.delete(*keys)
-            print(f"event=cache_delete keys={','.join(keys)} deleted={deleted}", flush=True)
+        with get_tracer().start_as_current_span("task.cache.delete") as span:
+            span.set_attribute("cache.operation", "delete")
+            span.set_attribute("cache.key_pattern", ",".join(self._key_pattern(key) for key in keys))
+            try:
+                deleted = self.client.delete(*keys)
+                logger.info("event=cache_delete key_count=%s deleted=%s", len(keys), deleted)
+            except Exception as exc:
+                span.record_exception(exc)
+                span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
+                logger.exception("event=cache_error action=delete key_count=%s", len(keys))
 
-        except Exception as e:
-            print(f"event=cache_error action=delete keys={','.join(keys)} error={e}", flush=True)
+    @staticmethod
+    def _key_pattern(key: str) -> str:
+        return "tasks:item:{task_id}" if key.startswith("tasks:item:") else key
 
+    @classmethod
+    def _set_common_attributes(cls, span, operation: str, key: str) -> None:
+        span.set_attribute("cache.operation", operation)
+        span.set_attribute("cache.key_pattern", cls._key_pattern(key))
 
 cache = Cache()
