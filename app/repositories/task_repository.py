@@ -1,7 +1,12 @@
 from typing import Optional
+import logging
 
 from app.config.database import Database, database
 from app.metrics import DB_QUERY_LATENCY_SECONDS
+from app.observability import trace_db_operation
+
+
+logger = logging.getLogger(__name__)
 
 
 class TaskRepository:
@@ -10,9 +15,9 @@ class TaskRepository:
         self.db = db
 
     def create_task(self, title: str) -> dict:
-        print("event=db_query target=primary operation=create_task", flush=True)
+        logger.info("event=db_query target=primary operation=create_task")
 
-        with DB_QUERY_LATENCY_SECONDS.labels(
+        with trace_db_operation("create_task", "write", "primary"), DB_QUERY_LATENCY_SECONDS.labels(
             operation="create_task",
             target="primary",
         ).time():
@@ -32,9 +37,9 @@ class TaskRepository:
         return self._row_to_task(row)
 
     def list_tasks(self) -> list[dict]:
-        print("event=db_query target=replica operation=list_tasks", flush=True)
+        logger.info("event=db_query target=replica operation=list_tasks")
 
-        with DB_QUERY_LATENCY_SECONDS.labels(
+        with trace_db_operation("list_tasks", "read", "replica"), DB_QUERY_LATENCY_SECONDS.labels(
             operation="list_tasks",
             target="replica",
         ).time():
@@ -52,12 +57,9 @@ class TaskRepository:
         return [self._row_to_task(row) for row in rows]
 
     def get_task_by_id(self, task_id: int) -> Optional[dict]:
-        print(
-            f"event=db_query target=replica operation=get_task_by_id task_id={task_id}",
-            flush=True,
-        )
+        logger.info("event=db_query target=replica operation=get_task_by_id")
 
-        with DB_QUERY_LATENCY_SECONDS.labels(
+        with trace_db_operation("get_task_by_id", "read", "replica"), DB_QUERY_LATENCY_SECONDS.labels(
             operation="get_task_by_id",
             target="replica",
         ).time():
@@ -84,12 +86,9 @@ class TaskRepository:
         title: str | None = None,
         done: bool | None = None,
     ) -> Optional[dict]:
-        print(
-            f"event=db_query target=primary operation=update_task task_id={task_id}",
-            flush=True,
-        )
+        logger.info("event=db_query target=primary operation=update_task")
 
-        with DB_QUERY_LATENCY_SECONDS.labels(
+        with trace_db_operation("update_task", "write", "primary"), DB_QUERY_LATENCY_SECONDS.labels(
             operation="update_task",
             target="primary",
         ).time():
@@ -114,12 +113,9 @@ class TaskRepository:
         return self._row_to_task(row)
 
     def delete_task(self, task_id: int) -> bool:
-        print(
-            f"event=db_query target=primary operation=delete_task task_id={task_id}",
-            flush=True,
-        )
+        logger.info("event=db_query target=primary operation=delete_task")
 
-        with DB_QUERY_LATENCY_SECONDS.labels(
+        with trace_db_operation("delete_task", "write", "primary"), DB_QUERY_LATENCY_SECONDS.labels(
             operation="delete_task",
             target="primary",
         ).time():
@@ -145,6 +141,5 @@ class TaskRepository:
             "title": row[1],
             "done": row[2],
         }
-
 
 task_repository = TaskRepository(database)

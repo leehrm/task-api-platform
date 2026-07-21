@@ -1,4 +1,5 @@
 import os
+import logging
 from contextlib import contextmanager
 from typing import Generator, Literal
 
@@ -7,6 +8,7 @@ from psycopg2.extensions import connection as PsycopgConnection
 
 
 DatabaseTarget = Literal["primary", "replica"]
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -115,7 +117,7 @@ class Database:
         """
         테이블 생성은 write 작업이므로 반드시 Primary에서 실행.
         """
-        print("event=db_query target=primary operation=init_db", flush=True)
+        logger.info("event=db_query target=primary operation=init_db")
 
         with self.get_write_db_connection() as conn:
             with conn.cursor() as cur:
@@ -135,7 +137,7 @@ class Database:
         현재 구현은 요청마다 DB connection을 열고 context manager에서 닫음.
         별도 pool은 없지만 shutdown 시점 관측을 위해 로그를 남김.
         """
-        print("event=db_shutdown connection_model=per_request", flush=True)
+        logger.info("event=db_shutdown connection_model=per_request")
 
 
 database = Database()

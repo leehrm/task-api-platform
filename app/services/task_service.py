@@ -3,6 +3,7 @@ from typing import Optional
 from app.config.cache import cache
 from app.models.task_model import TaskCreate, TaskUpdate
 from app.repositories.task_repository import TaskRepository, task_repository
+from opentelemetry import trace
 
 
 class TaskService:
@@ -13,6 +14,7 @@ class TaskService:
         self.repository = repository
 
     def create_task(self, task: TaskCreate) -> dict:
+        self._set_operation("create")
         created_task = self.repository.create_task(task.title)
 
         cache.delete(self.TASK_LIST_CACHE_KEY)
@@ -20,6 +22,7 @@ class TaskService:
         return created_task
 
     def list_tasks(self) -> list[dict]:
+        self._set_operation("list")
         cached_tasks = cache.get(self.TASK_LIST_CACHE_KEY)
 
         if cached_tasks is not None:
@@ -31,6 +34,7 @@ class TaskService:
         return tasks
 
     def get_task(self, task_id: int) -> Optional[dict]:
+        self._set_operation("get")
         cache_key = self._task_item_cache_key(task_id)
 
         cached_task = cache.get(cache_key)
@@ -46,6 +50,7 @@ class TaskService:
         return task
 
     def update_task(self, task_id: int, task: TaskUpdate) -> Optional[dict]:
+        self._set_operation("update")
         updated_task = self.repository.update_task(
             task_id=task_id,
             title=task.title,
@@ -61,6 +66,7 @@ class TaskService:
         return updated_task
 
     def delete_task(self, task_id: int) -> bool:
+        self._set_operation("delete")
         deleted = self.repository.delete_task(task_id)
 
         if deleted:
@@ -74,6 +80,12 @@ class TaskService:
     @staticmethod
     def _task_item_cache_key(task_id: int) -> str:
         return f"tasks:item:{task_id}"
+
+    @staticmethod
+    def _set_operation(operation: str) -> None:
+        span = trace.get_current_span()
+        if span.is_recording():
+            span.set_attribute("task.operation", operation)
 
 
 task_service = TaskService(task_repository)

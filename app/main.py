@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import time
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +12,8 @@ from starlette.responses import FileResponse, Response
 from app.config.database import database
 from app.lifecycle import lifecycle_state
 from app.metrics import HTTP_REQUEST_TOTAL, HTTP_REQUEST_DURATION_SECONDS
+from app.logging_config import configure_logging
+from app.observability import configure_observability
 from app.routes.health_routes import router as health_router
 from app.routes.task_routes import router as task_router
 from app.routes.debug_routes import router as debug_router
@@ -18,28 +21,21 @@ from app.routes.debug_routes import router as debug_router
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+configure_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(
-        f"event=app_start pod={lifecycle_state.pod_name} version=0.4.0",
-        flush=True,
-    )
+    logger.info("event=app_start pod=%s version=0.4.0", lifecycle_state.pod_name)
     database.init_db()
     try:
         yield
     finally:
         lifecycle_state.mark_draining("lifespan_shutdown")
-        print(
-            f"event=app_shutdown_start pod={lifecycle_state.pod_name}",
-            flush=True,
-        )
+        logger.info("event=app_shutdown_start pod=%s", lifecycle_state.pod_name)
         database.shutdown()
-        print(
-            f"event=app_shutdown_complete pod={lifecycle_state.pod_name}",
-            flush=True,
-        )
+        logger.info("event=app_shutdown_complete pod=%s", lifecycle_state.pod_name)
 
 
 app = FastAPI(
@@ -47,6 +43,7 @@ app = FastAPI(
     version="0.4.0",
     lifespan=lifespan,
 )
+configure_observability(app)
 
 
 if STATIC_DIR.exists():
