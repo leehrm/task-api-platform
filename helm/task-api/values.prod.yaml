@@ -1,5 +1,8 @@
 replicaCount: 2
 
+env:
+  APP_ENV: "prod"
+
 image:
   repository: task-api
   tag: stable

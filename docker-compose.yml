@@ -6,8 +6,27 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DB_HOST: db
+      DB_PRIMARY_HOST: db
+      DB_READ_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      CACHE_ENABLED: "true"
+      CACHE_TTL_SECONDS: "60"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      OTEL_SERVICE_NAME: task-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      DEBUG_SLOW_SECONDS: ${DEBUG_SLOW_SECONDS:-0.6}
     depends_on:
       - db
+      - redis
 
   db:
     image: postgres:16
@@ -20,6 +39,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: task-api-redis
+    ports:
+      - "6379:6379"
 
 volumes:
   postgres_data:
