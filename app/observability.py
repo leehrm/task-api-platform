@@ -27,6 +27,7 @@ EXCLUDED_URLS = ",".join(
         r".*/internal/drain$",
     )
 )
+EXCLUDED_FASTAPI_SPANS = ["receive", "send"]
 
 _configured = False
 
@@ -52,7 +53,11 @@ def configure_observability(app: FastAPI) -> None:
 
     Psycopg2Instrumentor().instrument()
     RedisInstrumentor().instrument()
-    FastAPIInstrumentor.instrument_app(app, excluded_urls=EXCLUDED_URLS)
+    FastAPIInstrumentor.instrument_app(
+        app,
+        excluded_urls=EXCLUDED_URLS,
+        exclude_spans=EXCLUDED_FASTAPI_SPANS,
+    )
     _configured = True
     logger.info("event=otel_initialized service=%s", os.getenv("OTEL_SERVICE_NAME", "task-api"))
 
