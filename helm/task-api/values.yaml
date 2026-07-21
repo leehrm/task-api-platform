@@ -64,6 +64,10 @@ image:
 
 imagePullSecrets: []
 
+observability:
+  grafanaDashboard:
+    enabled: true
+
 nameOverride: ""
 fullnameOverride: ""
 

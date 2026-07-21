@@ -6,7 +6,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind, StatusCode
 
-from app.observability import EXCLUDED_URLS, trace_db_operation
+from app.observability import EXCLUDED_FASTAPI_SPANS, EXCLUDED_URLS, trace_db_operation
 
 
 def test_required_paths_are_excluded():
@@ -53,6 +53,7 @@ def _instrumented_client():
         application,
         tracer_provider=provider,
         excluded_urls=EXCLUDED_URLS,
+        exclude_spans=EXCLUDED_FASTAPI_SPANS,
     )
     return TestClient(application, raise_server_exceptions=False), exporter
 
@@ -76,6 +77,16 @@ def test_fastapi_status_policy():
     assert _server_span(exporter, "/ok").status.status_code is StatusCode.UNSET
     assert _server_span(exporter, "/missing").status.status_code is StatusCode.UNSET
     assert _server_span(exporter, "/error").status.status_code is StatusCode.ERROR
+
+
+def test_fastapi_internal_send_receive_spans_are_excluded():
+    client, exporter = _instrumented_client()
+
+    assert client.get("/ok").status_code == 200
+    assert all(
+        not span.name.endswith(("http send", "http receive"))
+        for span in exporter.get_finished_spans()
+    )
 
 
 def test_health_path_does_not_create_server_span():
