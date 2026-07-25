@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from typing import Generator, Literal
 
 import psycopg2
+from opentelemetry.instrumentation.utils import suppress_instrumentation
 from psycopg2.extensions import connection as PsycopgConnection
 
 
@@ -99,10 +100,11 @@ class Database:
         """
         readiness check는 기본적으로 Primary 연결을 확인.
         """
-        with self.get_write_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1;")
-                cur.fetchone()
+        with suppress_instrumentation():
+            with self.get_write_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1;")
+                    cur.fetchone()
 
     def check_read_connection(self) -> None:
         """

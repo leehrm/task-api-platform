@@ -1,11 +1,15 @@
+from unittest.mock import MagicMock, Mock, patch
+
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.utils import is_instrumentation_enabled
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind, StatusCode
 
+from app.config.database import Database
 from app.observability import EXCLUDED_FASTAPI_SPANS, EXCLUDED_URLS, trace_db_operation
 
 
@@ -110,4 +114,21 @@ def test_db_operation_attributes_are_added():
 
     span.set_attribute.assert_any_call("db.role", "read")
     span.set_attribute.assert_any_call("db.target", "replica")
-from unittest.mock import Mock, patch
+
+
+def test_readiness_db_check_suppresses_instrumentation():
+    db = Database()
+    connection_context = MagicMock()
+    connection = connection_context.__enter__.return_value
+    cursor = connection.cursor.return_value.__enter__.return_value
+    instrumentation_states = []
+    cursor.execute.side_effect = lambda _: instrumentation_states.append(
+        is_instrumentation_enabled()
+    )
+
+    assert is_instrumentation_enabled()
+    with patch.object(db, "get_write_db_connection", return_value=connection_context):
+        db.check_connection()
+
+    assert instrumentation_states == [False]
+    assert is_instrumentation_enabled()
