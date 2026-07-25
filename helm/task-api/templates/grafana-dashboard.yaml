@@ -1,0 +1,375 @@
+{{- if .Values.observability.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "task-api.fullname" . }}-grafana-dashboard
+  labels:
+    {{- include "task-api.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  task-api-observability.json: |
+    {
+      "id": null,
+      "uid": "task-api-tracing",
+      "title": "Task API / Observability",
+      "tags": ["task-api", "opentelemetry", "prometheus", "tempo", "loki"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Request rate",
+          "description": "Task API requests per second over the last 5 minutes.",
+          "id": 1,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\",path=~\"/tasks.*|/version\"}[5m]))",
+              "legendFormat": "requests/s",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 5 }
+        },
+        {
+          "type": "stat",
+          "title": "5xx error rate",
+          "description": "Ratio of Task API responses with a 5xx status.",
+          "id": 2,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "(sum(rate(http_request_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\",path=~\"/tasks.*|/version\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_request_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\",path=~\"/tasks.*|/version\"}[5m])), 0.000001)) or vector(0)",
+              "legendFormat": "5xx ratio",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 0.01 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 6, "y": 0, "w": 6, "h": 5 }
+        },
+        {
+          "type": "stat",
+          "title": "Cache hit ratio",
+          "description": "Share of successful cache lookups served from Redis.",
+          "id": 3,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(cache_hit_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\"}[5m])) / clamp_min(sum(rate(cache_hit_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\"}[5m])) + sum(rate(cache_miss_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\"}[5m])), 0.000001)",
+              "legendFormat": "hit ratio",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 12, "y": 0, "w": 6, "h": 5 }
+        },
+        {
+          "type": "stat",
+          "title": "Available replicas",
+          "description": "Currently available Task API deployment replicas.",
+          "id": 9,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"{{ .Release.Namespace }}\",deployment=\"{{ include "task-api.fullname" . }}\"}",
+              "legendFormat": "replicas",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 18, "y": 0, "w": 6, "h": 5 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Request rate by route and status",
+          "description": "Traffic split by HTTP method, route, and response status.",
+          "id": 10,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum by (method, path, status) (rate(http_request_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\",path=~\"/tasks.*|/version\"}[5m]))",
+              "legendFormat": "{{ "{{method}} {{path}} {{status}}" }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 0, "y": 5, "w": 24, "h": 7 }
+        },
+        {
+          "type": "timeseries",
+          "title": "HTTP p95 latency",
+          "description": "Use 500 ms as the initial slow-request threshold.",
+          "id": 4,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, method, path) (rate(http_request_duration_seconds_bucket{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\",path=~\"/tasks.*|/version\"}[5m])))",
+              "legendFormat": "{{ "{{method}} {{path}}" }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 0.5 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 }
+        },
+        {
+          "type": "timeseries",
+          "title": "DB p95 latency",
+          "description": "Use 200 ms as the initial slow-query threshold.",
+          "id": 5,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, operation, target) (rate(db_query_latency_seconds_bucket{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\"}[5m])))",
+              "legendFormat": "{{ "{{operation}} / {{target}}" }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 0.2 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Cache hit / miss rate",
+          "id": 6,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(cache_hit_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\"}[5m]))",
+              "legendFormat": "hit",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(rate(cache_miss_total{namespace=\"{{ .Release.Namespace }}\",job=\"{{ .Release.Name }}\"}[5m]))",
+              "legendFormat": "miss",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 0, "y": 20, "w": 24, "h": 7 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Pod CPU usage",
+          "description": "CPU cores used by each Task API container.",
+          "id": 11,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"{{ .Release.Namespace }}\",container=\"api\",image!=\"\"}[5m]))",
+              "legendFormat": "{{ "{{pod}}" }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "cores"
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 0, "y": 27, "w": 12, "h": 7 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Pod memory working set",
+          "description": "Working-set memory used by each Task API container.",
+          "id": 12,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"{{ .Release.Namespace }}\",container=\"api\",image!=\"\"})",
+              "legendFormat": "{{ "{{pod}}" }}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": { "x": 12, "y": 27, "w": 12, "h": 7 }
+        },
+        {
+          "type": "table",
+          "title": "Problem traces",
+          "description": "HTTP traces with an error status or a duration above the 500 ms slow-request threshold.",
+          "id": 13,
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "queryType": "traceql",
+              "query": "{ resource.service.name = \"task-api\" && span.http.route != nil && (status = error || duration > 500ms) }",
+              "limit": 50,
+              "tableType": "traces"
+            }
+          ],
+          "options": {
+            "showHeader": true
+          },
+          "gridPos": { "x": 0, "y": 34, "w": 24, "h": 8 }
+        },
+        {
+          "type": "table",
+          "title": "Recent Task API traces",
+          "description": "Select a row to open the full HTTP → Redis → DB trace waterfall.",
+          "id": 7,
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "queryType": "traceql",
+              "query": "{ resource.service.name = \"task-api\" && span.http.route != nil }",
+              "limit": 50,
+              "tableType": "traces"
+            }
+          ],
+          "options": {
+            "showHeader": true
+          },
+          "gridPos": { "x": 0, "y": 42, "w": 24, "h": 10 }
+        },
+        {
+          "type": "logs",
+          "title": "Trace-correlated Task API logs",
+          "description": "Application logs containing trace_id and span_id. Open a trace above, then search its trace_id here.",
+          "id": 8,
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "targets": [
+            {
+              "expr": "{app=\"task-api\", namespace=\"{{ .Release.Namespace }}\"} |= \"trace_id=\"",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "wrapLogMessage": true,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          },
+          "gridPos": { "x": 0, "y": 52, "w": 24, "h": 12 }
+        }
+      ]
+    }
+{{- end }}
