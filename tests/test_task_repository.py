@@ -6,6 +6,7 @@ from app.repositories.task_repository import TaskRepository
 class _FakeCursor:
     def __init__(self) -> None:
         self.executed: list[tuple] = []
+        self.fetchone_results: list[tuple | None] = []
 
     def __enter__(self):
         return self
@@ -17,6 +18,8 @@ class _FakeCursor:
         self.executed.append((sql, params))
 
     def fetchone(self):
+        if self.fetchone_results:
+            return self.fetchone_results.pop(0)
         return (1, "title", False)
 
     def fetchall(self):
@@ -79,6 +82,19 @@ def test_reads_use_replica_and_never_commit():
         assert db.replica.cursor_.executed, "replica에 쿼리가 가지 않았다"
         assert db.replica.commits == 0
         assert not db.primary.cursor_.executed
+
+
+def test_update_reports_only_new_completion():
+    for previous_done, expected in ((False, True), (True, False)):
+        repo, db = _repo()
+        db.primary.cursor_.fetchone_results = [
+            (previous_done,),
+            (1, "title", True),
+        ]
+
+        _, became_done = repo.update_task(1, done=True)
+
+        assert became_done is expected
 
 
 def test_failed_write_does_not_commit():

@@ -23,7 +23,12 @@ class _RecordingCache:
 
 def _service_with_recording_cache():
     recorder = _RecordingCache()
-    return TaskService(repository=Mock(), cache_client=recorder), recorder
+    repository = Mock()
+    repository.update_task.return_value = (
+        {"id": 42, "title": "x", "done": False},
+        False,
+    )
+    return TaskService(repository=repository, cache_client=recorder), recorder
 
 
 def test_task_ids_never_reach_cache_labels():

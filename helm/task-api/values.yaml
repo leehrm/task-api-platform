@@ -34,6 +34,8 @@ env:
   DB_USER: "taskuser"
   APP_ENV: "dev"
   
+  NOTIFIER: "none"
+
   CACHE_ENABLED: "true"
   CACHE_TTL_SECONDS: "60"
   REDIS_HOST: "redis-master.redis.svc.cluster.local"
@@ -48,6 +50,7 @@ secretEnv:
   # Legacy mode only: replace these placeholders before deployment.
   DB_PASSWORD: "REPLACE_ME"
   REDIS_PASSWORD: "REPLACE_ME"
+  NOTIFY_WEBHOOK_URL: "REPLACE_ME"
 
 secret:
   create: true
