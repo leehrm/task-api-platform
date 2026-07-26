@@ -70,8 +70,9 @@ async def prometheus_http_metrics_middleware(request: Request, call_next):
         raise
 
     finally:
+        # route가 없으면(매칭 실패) 원본 URL이 label이 되어 시계열이 무한히 늘어남
         route = request.scope.get("route")
-        path = getattr(route, "path", request.url.path)
+        path = getattr(route, "path", "unmatched")
         duration_seconds = time.perf_counter() - start_time
 
         HTTP_REQUEST_TOTAL.labels(
