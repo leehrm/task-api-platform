@@ -4,6 +4,10 @@ from app.config.database import Database, database
 from app.lifecycle import lifecycle_state
 
 
+class PodDraining(Exception):
+    """readiness 실패 중 '종료 중'을 DB 장애와 구분하기 위한 신호."""
+
+
 class HealthService:
 
     def __init__(self, db: Database) -> None:
@@ -17,7 +21,7 @@ class HealthService:
 
     def get_readiness_status(self) -> dict:
         if lifecycle_state.draining:
-            raise RuntimeError("pod is draining")
+            raise PodDraining()
 
         self.db.check_connection()
 
