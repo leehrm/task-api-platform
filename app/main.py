@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import FileResponse, Response
 
+from app import __version__
 from app.config.database import database
 from app.lifecycle import lifecycle_state
 from app.metrics import HTTP_REQUEST_TOTAL, HTTP_REQUEST_DURATION_SECONDS
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("event=app_start pod=%s version=0.4.0", lifecycle_state.pod_name)
+    logger.info("event=app_start pod=%s version=%s", lifecycle_state.pod_name, __version__)
     database.init_db()
     try:
         yield
@@ -40,7 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Task API Platform",
-    version="0.4.0",
+    version=__version__,
     lifespan=lifespan,
 )
 configure_observability(app)

@@ -1,5 +1,6 @@
 import os
 
+from app import __version__
 from app.config.database import Database, database
 from app.lifecycle import lifecycle_state
 
@@ -41,7 +42,7 @@ class HealthService:
     def get_version_status(self) -> dict:
         return {
             "app": "task-api",
-            "version": os.getenv("APP_VERSION", "local"),
+            "version": os.getenv("APP_VERSION", __version__),
         }
 
 
