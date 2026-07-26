@@ -64,13 +64,6 @@ class Database:
             **self._get_common_connection_kwargs(),
         )
 
-    def get_connection(self) -> PsycopgConnection:
-        """
-        기존 코드 호환.
-        기본 연결은 write connection으로 둔다.
-        """
-        return self.get_write_connection()
-
     @contextmanager
     def get_write_db_connection(self) -> Generator[PsycopgConnection, None, None]:
         conn = self.get_write_connection()
@@ -87,15 +80,6 @@ class Database:
         finally:
             conn.close()
 
-    @contextmanager
-    def get_db_connection(self) -> Generator[PsycopgConnection, None, None]:
-        """
-        기존 코드 호환.
-        명시하지 않은 DB 작업은 Primary로 보냄.
-        """
-        with self.get_write_db_connection() as conn:
-            yield conn
-
     def check_connection(self) -> None:
         """
         readiness check는 기본적으로 Primary 연결을 확인.
@@ -105,15 +89,6 @@ class Database:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1;")
                     cur.fetchone()
-
-    def check_read_connection(self) -> None:
-        """
-        Read Replica 연결 확인.
-        """
-        with self.get_read_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1;")
-                cur.fetchone()
 
     def init_db(self) -> None:
         """
