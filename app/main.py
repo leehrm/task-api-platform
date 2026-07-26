@@ -47,8 +47,7 @@ app = FastAPI(
 configure_observability(app)
 
 
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.middleware("http")
@@ -65,10 +64,6 @@ async def prometheus_http_metrics_middleware(request: Request, call_next):
         response = await call_next(request)
         status = str(response.status_code)
         return response
-
-    except Exception:
-        status = "500"
-        raise
 
     finally:
         # route가 없으면(매칭 실패) 원본 URL이 label이 되어 시계열이 무한히 늘어남
