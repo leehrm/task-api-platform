@@ -9,12 +9,8 @@ router = APIRouter(prefix="/debug", tags=["debug"])
 logger = logging.getLogger(__name__)
 
 
-def _debug_enabled() -> bool:
-    return os.getenv("ENABLE_DEBUG_ENDPOINTS", "false").lower() == "true"
-
-
 def _raise_not_found_when_disabled() -> None:
-    if not _debug_enabled():
+    if os.getenv("ENABLE_DEBUG_ENDPOINTS", "false").lower() != "true":
         raise HTTPException(status_code=404, detail="Not found")
 
 

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from app.config.cache import cache
+from app.config.cache import Cache, cache
 from app.models.task_model import TaskCreate, TaskUpdate
 from app.repositories.task_repository import TaskRepository, task_repository
 from opentelemetry import trace
@@ -9,27 +9,30 @@ from opentelemetry import trace
 class TaskService:
 
     TASK_LIST_CACHE_KEY = "tasks:list"
+    TASK_ITEM_LABEL = "tasks:item:{task_id}"
+    TASK_INVALIDATE_LABEL = f"{TASK_LIST_CACHE_KEY},{TASK_ITEM_LABEL}"
 
-    def __init__(self, repository: TaskRepository) -> None:
+    def __init__(self, repository: TaskRepository, cache_client: Cache = cache) -> None:
         self.repository = repository
+        self.cache = cache_client
 
     def create_task(self, task: TaskCreate) -> dict:
         self._set_operation("create")
         created_task = self.repository.create_task(task.title)
 
-        cache.delete(self.TASK_LIST_CACHE_KEY)
+        self.cache.delete(self.TASK_LIST_CACHE_KEY)
 
         return created_task
 
     def list_tasks(self) -> list[dict]:
         self._set_operation("list")
-        cached_tasks = cache.get(self.TASK_LIST_CACHE_KEY)
+        cached_tasks = self.cache.get(self.TASK_LIST_CACHE_KEY)
 
         if cached_tasks is not None:
             return cached_tasks
 
         tasks = self.repository.list_tasks()
-        cache.set(self.TASK_LIST_CACHE_KEY, tasks)
+        self.cache.set(self.TASK_LIST_CACHE_KEY, tasks)
 
         return tasks
 
@@ -37,7 +40,7 @@ class TaskService:
         self._set_operation("get")
         cache_key = self._task_item_cache_key(task_id)
 
-        cached_task = cache.get(cache_key)
+        cached_task = self.cache.get(cache_key, label=self.TASK_ITEM_LABEL)
 
         if cached_task is not None:
             return cached_task
@@ -45,7 +48,7 @@ class TaskService:
         task = self.repository.get_task_by_id(task_id)
 
         if task is not None:
-            cache.set(cache_key, task)
+            self.cache.set(cache_key, task, label=self.TASK_ITEM_LABEL)
 
         return task
 
@@ -58,10 +61,7 @@ class TaskService:
         )
 
         if updated_task is not None:
-            cache.delete(
-                self.TASK_LIST_CACHE_KEY,
-                self._task_item_cache_key(task_id),
-            )
+            self._invalidate(task_id)
 
         return updated_task
 
@@ -70,12 +70,16 @@ class TaskService:
         deleted = self.repository.delete_task(task_id)
 
         if deleted:
-            cache.delete(
-                self.TASK_LIST_CACHE_KEY,
-                self._task_item_cache_key(task_id),
-            )
+            self._invalidate(task_id)
 
         return deleted
+
+    def _invalidate(self, task_id: int) -> None:
+        self.cache.delete(
+            self.TASK_LIST_CACHE_KEY,
+            self._task_item_cache_key(task_id),
+            label=self.TASK_INVALIDATE_LABEL,
+        )
 
     @staticmethod
     def _task_item_cache_key(task_id: int) -> str:
