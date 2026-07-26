@@ -84,8 +84,22 @@ class TaskRepository:
         task_id: int,
         title: str | None = None,
         done: bool | None = None,
-    ) -> Optional[dict]:
+    ) -> tuple[dict, bool] | None:
         with self._query("update_task", write=True) as cur:
+            cur.execute(
+                """
+                SELECT done
+                FROM tasks
+                WHERE id = %s
+                FOR UPDATE;
+                """,
+                (task_id,),
+            )
+            previous = cur.fetchone()
+
+            if previous is None:
+                return None
+
             cur.execute(
                 """
                 UPDATE tasks
@@ -98,7 +112,7 @@ class TaskRepository:
             )
             row = cur.fetchone()
 
-        return None if row is None else self._row_to_task(row)
+        return self._row_to_task(row), previous[0] is False and row[2] is True
 
     def delete_task(self, task_id: int) -> bool:
         with self._query("delete_task", write=True) as cur:
