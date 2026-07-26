@@ -17,6 +17,18 @@ CACHE_MISS_TOTAL = Counter(
     "Total number of cache misses",
 )
 
+NOTIFICATION_SENT_TOTAL = Counter(
+    "notification_sent_total",
+    "Total number of notifications sent",
+    ["channel"],
+)
+
+NOTIFICATION_FAILED_TOTAL = Counter(
+    "notification_failed_total",
+    "Total number of notifications that failed to send",
+    ["channel"],
+)
+
 DB_QUERY_LATENCY_SECONDS = Histogram(
     "db_query_latency_seconds",
     "Database query latency in seconds",
