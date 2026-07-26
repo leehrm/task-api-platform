@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import FileResponse, Response
 
+from app import __version__
 from app.config.database import database
 from app.lifecycle import lifecycle_state
 from app.metrics import HTTP_REQUEST_TOTAL, HTTP_REQUEST_DURATION_SECONDS
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("event=app_start pod=%s version=0.4.0", lifecycle_state.pod_name)
+    logger.info("event=app_start pod=%s version=%s", lifecycle_state.pod_name, __version__)
     database.init_db()
     try:
         yield
@@ -40,14 +41,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Task API Platform",
-    version="0.4.0",
+    version=__version__,
     lifespan=lifespan,
 )
 configure_observability(app)
 
 
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.middleware("http")
@@ -65,13 +65,10 @@ async def prometheus_http_metrics_middleware(request: Request, call_next):
         status = str(response.status_code)
         return response
 
-    except Exception:
-        status = "500"
-        raise
-
     finally:
+        # route가 없으면(매칭 실패) 원본 URL이 label이 되어 시계열이 무한히 늘어남
         route = request.scope.get("route")
-        path = getattr(route, "path", request.url.path)
+        path = getattr(route, "path", "unmatched")
         duration_seconds = time.perf_counter() - start_time
 
         HTTP_REQUEST_TOTAL.labels(

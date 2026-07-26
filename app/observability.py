@@ -12,6 +12,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from app import __version__
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ def configure_observability(app: FastAPI) -> None:
     resource = Resource.create(
         {
             "service.name": os.getenv("OTEL_SERVICE_NAME", "task-api"),
-            "service.version": "0.4.0",
+            "service.version": os.getenv("APP_VERSION", __version__),
             "deployment.environment.name": os.getenv("APP_ENV", "local"),
             "k8s.namespace.name": os.getenv("POD_NAMESPACE", "unknown"),
             "k8s.pod.name": os.getenv("POD_NAME", "unknown"),

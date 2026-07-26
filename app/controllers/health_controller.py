@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Request
 
-from app.services.health_service import HealthService, health_service
+from app.services.health_service import HealthService, PodDraining, health_service
 
 
 class HealthController:
@@ -15,6 +15,9 @@ class HealthController:
     def readyz(self):
         try:
             return self.service.get_readiness_status()
+        except PodDraining:
+            # 정상 종료 중. 세부 상태는 /healthz가 계속 응답한다.
+            raise HTTPException(status_code=503, detail={"status": "draining"})
         except Exception as e:
             raise HTTPException(
                 status_code=503,

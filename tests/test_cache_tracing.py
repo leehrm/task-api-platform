@@ -1,15 +1,49 @@
 from unittest.mock import Mock, patch
 
 from app.config.cache import Cache
+from app.services.task_service import TaskService
 
 
-def test_cache_key_patterns_hide_task_ids():
-    assert Cache._key_pattern("tasks:list") == "tasks:list"
-    assert Cache._key_pattern("tasks:item:42") == "tasks:item:{task_id}"
+class _RecordingCache:
+    """Cache 대역. span/log에 남을 label만 기록한다."""
+
+    def __init__(self) -> None:
+        self.labels: list[str] = []
+
+    def get(self, key, label=None):
+        self.labels.append(label or key)
+        return None
+
+    def set(self, key, value, ttl_seconds=None, label=None):
+        self.labels.append(label or key)
+
+    def delete(self, *keys, label=None):
+        self.labels.append(label or ",".join(keys))
 
 
-def test_unknown_cache_key_is_preserved():
-    assert Cache._key_pattern("other:key") == "other:key"
+def _service_with_recording_cache():
+    recorder = _RecordingCache()
+    return TaskService(repository=Mock(), cache_client=recorder), recorder
+
+
+def test_task_ids_never_reach_cache_labels():
+    service, recorder = _service_with_recording_cache()
+
+    service.get_task(42)
+    service.update_task(42, Mock(title="x", done=None))
+    service.delete_task(42)
+
+    assert recorder.labels, "cache 호출이 기록되지 않았다"
+    assert not any("42" in label for label in recorder.labels)
+
+
+def test_list_key_is_used_as_its_own_label():
+    service, recorder = _service_with_recording_cache()
+    service.repository.list_tasks.return_value = []
+
+    service.list_tasks()
+
+    assert recorder.labels == ["tasks:list", "tasks:list"]
 
 
 def test_redis_error_is_not_reported_as_cache_miss():
