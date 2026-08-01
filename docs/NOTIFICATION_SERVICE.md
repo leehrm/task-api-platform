@@ -4,29 +4,34 @@
 
 ## 동작 개요
 
-기존 Task API는 task 상태 변경과 Slack 완료 알림을 하나의 process에서 함께 처리함.
+Task가 완료되면 시스템은 완료 상태를 저장하고 Slack에 완료 알림을 보내야 함.
+
+기존 구조에서는 Task API가 두 작업을 모두 처리함.
 
 ```text
-Task API
-  -> task 완료 상태 저장
-  -> Slack webhook 직접 호출
+사용자 요청
+  -> Task API
+     -> 완료 상태 저장
+     -> Slack 알림 전송
 ```
 
-완료 알림이 Python method call로 실행되므로 Task API 밖으로 network traffic이 발생하지 않음. Kiali는 network를 통과하는 workload 간 요청을 관찰하므로 이 호출을 별도 service 흐름으로 표시할 수 없음.
+완료 상태를 저장하는 기능과 알림을 준비하는 기능이 Task API 안에서 실행되므로 Kiali에서는 두 기능 사이의 흐름을 별도의 이동 경로로 볼 수 없음.
 
-Notification Service를 추가한 뒤에는 비교용 Task API가 task 완료 상태를 먼저 저장하고, task ID와 title을 별도 Notification Service에 HTTP로 전달함. Notification Service가 Slack webhook 호출을 담당함.
+변경 후에는 비교용 Task API가 완료 상태를 저장하고, 어떤 task가 완료되었는지를 Notification Service에 전달함. Notification Service는 전달받은 내용을 사용해 Slack 알림을 보냄.
 
 ```text
-비교용 Task API
-  -> 완료 상태를 먼저 기록
-  -> task ID와 title을 HTTP로 전달
-  -> Notification Service
-  -> Slack webhook 호출
+사용자 요청
+  -> 비교용 Task API
+     -> 완료 상태 저장
+     -> Notification Service에 완료 내용 전달
+        -> Slack 알림 전송
 ```
 
-Task API와 Notification Service 사이의 요청이 실제 network traffic이 되므로 Kiali에서 두 workload 사이의 요청량, latency와 실패 여부를 확인할 수 있음. Envoy sidecar가 workload 간 통신의 암호화와 identity 확인을 처리함.
+Task API와 Notification Service가 실제로 요청을 주고받으므로 Kiali에서 두 프로그램 사이의 연결을 선으로 확인할 수 있음. 해당 요청이 몇 번 발생했는지, 응답에 시간이 얼마나 걸렸는지, 성공하거나 실패했는지도 함께 확인할 수 있음.
 
-Notification Service에 장애가 발생해도 이미 저장된 task 완료 상태는 유지됨. 알림 실패만 log와 metric에 기록함.
+두 프로그램 사이의 통신은 Istio가 암호화하고 서로의 신원을 확인함. 이를 위한 인증서 처리 코드를 Task API나 Notification Service에 직접 작성할 필요는 없음.
+
+Notification Service에 문제가 발생해도 이미 저장된 task 완료 상태는 유지됨. Slack 알림 전송만 실패로 기록함.
 
 기존 Task API는 계속 Slack에 직접 알림을 보냄. 비교용 Istio Task API만 Notification Service를 거치므로 두 방식을 동시에 비교할 수 있음.
 
