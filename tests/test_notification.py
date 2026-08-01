@@ -1,8 +1,11 @@
 import json
 from unittest.mock import Mock, patch
 
+import pytest
+
 from app.services.notification_service import (
     LoggingNotifier,
+    NotificationServiceClient,
     NullNotifier,
     SlackNotifier,
     build_notifier,
@@ -99,6 +102,22 @@ def test_slack_notifier_swallows_transport_errors():
         slack.task_completed({"id": 1, "title": "x", "done": True})
 
 
+def test_slack_notifier_can_propagate_transport_errors():
+    slack = SlackNotifier(
+        "https://hooks.example.invalid/x",
+        raise_on_error=True,
+    )
+
+    with (
+        patch(
+            "app.services.notification_service.urllib.request.urlopen",
+            side_effect=OSError("connection refused"),
+        ),
+        pytest.raises(OSError, match="connection refused"),
+    ):
+        slack.task_completed({"id": 1, "title": "x", "done": True})
+
+
 def test_slack_notifier_posts_json_payload():
     slack = SlackNotifier("https://hooks.example.invalid/x")
 
@@ -119,6 +138,38 @@ def test_slack_notifier_escapes_user_supplied_markup():
 
     text = json.loads(urlopen.call_args.args[0].data)["text"]
     assert "&lt;!channel&gt; &amp; 완료" in text
+
+
+def test_notification_service_client_posts_task_payload():
+    client = NotificationServiceClient(
+        "http://notification-service:8000/",
+        timeout=1.5,
+    )
+
+    with patch("app.services.notification_service.urllib.request.urlopen") as urlopen:
+        client.task_completed({"id": 7, "title": "보고서 작성", "done": True})
+
+    request = urlopen.call_args.args[0]
+    assert request.full_url == (
+        "http://notification-service:8000/notifications/task-completed"
+    )
+    assert request.method == "POST"
+    assert request.headers["Content-type"] == "application/json"
+    assert json.loads(request.data) == {"id": 7, "title": "보고서 작성"}
+    assert urlopen.call_args.kwargs["timeout"] == 1.5
+
+
+def test_notification_service_client_propagates_transport_errors():
+    client = NotificationServiceClient("http://notification-service:8000")
+
+    with (
+        patch(
+            "app.services.notification_service.urllib.request.urlopen",
+            side_effect=OSError("connection refused"),
+        ),
+        pytest.raises(OSError, match="connection refused"),
+    ):
+        client.task_completed({"id": 7, "title": "x"})
 
 
 def test_build_notifier_picks_by_env():
@@ -142,6 +193,20 @@ def test_slack_with_webhook_url_is_selected():
     env = {"NOTIFIER": "slack", "NOTIFY_WEBHOOK_URL": "https://hooks.example.invalid/x"}
     with patch.dict("os.environ", env, clear=True):
         assert isinstance(build_notifier(), SlackNotifier)
+
+
+def test_service_with_url_is_selected():
+    env = {
+        "NOTIFIER": "service",
+        "NOTIFICATION_SERVICE_URL": "http://notification-service:8000",
+    }
+    with patch.dict("os.environ", env, clear=True):
+        assert isinstance(build_notifier(), NotificationServiceClient)
+
+
+def test_service_without_url_falls_back_to_null():
+    with patch.dict("os.environ", {"NOTIFIER": "service"}, clear=True):
+        assert isinstance(build_notifier(), NullNotifier)
 
 
 def test_unknown_notifier_falls_back_with_warning():
