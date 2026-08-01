@@ -35,9 +35,15 @@ class LoggingNotifier:
 class SlackNotifier:
     """Slack incoming webhook으로 완료 메시지를 보낸다."""
 
-    def __init__(self, webhook_url: str, timeout: float = 2.0) -> None:
+    def __init__(
+        self,
+        webhook_url: str,
+        timeout: float = 2.0,
+        raise_on_error: bool = False,
+    ) -> None:
         self.webhook_url = webhook_url
         self.timeout = timeout
+        self.raise_on_error = raise_on_error
 
     def task_completed(self, task: dict) -> None:
         title = escape(task["title"], quote=False)
@@ -57,16 +63,52 @@ class SlackNotifier:
             NOTIFICATION_SENT_TOTAL.labels(channel="slack").inc()
             logger.info("event=task_completed channel=slack task_id=%s", task["id"])
         except Exception:
-            # 전송 실패는 메트릭과 로그로만 기록하고 호출자에게 전파하지 않는다.
             NOTIFICATION_FAILED_TOTAL.labels(channel="slack").inc()
             logger.exception("event=notification_failed channel=slack task_id=%s", task["id"])
+            if self.raise_on_error:
+                raise
+
+
+class NotificationServiceClient:
+    """완료 사실을 cluster 내부 Notification Service에 전달한다."""
+
+    def __init__(self, service_url: str, timeout: float = 2.0) -> None:
+        self.endpoint = f"{service_url.rstrip('/')}/notifications/task-completed"
+        self.timeout = timeout
+
+    def task_completed(self, task: dict) -> None:
+        payload = json.dumps(
+            {"id": task["id"], "title": task["title"]}
+        ).encode()
+        request = urllib.request.Request(
+            self.endpoint,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout):
+                pass
+            NOTIFICATION_SENT_TOTAL.labels(channel="service").inc()
+            logger.info(
+                "event=notification_forwarded channel=service task_id=%s",
+                task["id"],
+            )
+        except Exception:
+            NOTIFICATION_FAILED_TOTAL.labels(channel="service").inc()
+            logger.exception(
+                "event=notification_failed channel=service task_id=%s",
+                task["id"],
+            )
+            raise
 
 
 def build_notifier() -> Notifier:
     """
     NOTIFIER 환경변수에 따라 Notifier를 만든다.
-    slack / log / none(기본값)을 지원하며,
-    slack이지만 NOTIFY_WEBHOOK_URL이 없으면 NullNotifier를 반환한다.
+    slack / service / log / none(기본값)을 지원하며,
+    필수 URL이 없으면 NullNotifier를 반환한다.
     """
     kind = os.getenv("NOTIFIER", "none").strip().lower()
 
@@ -75,6 +117,11 @@ def build_notifier() -> Notifier:
         if webhook_url:
             return SlackNotifier(webhook_url)
         logger.warning("event=notifier_fallback reason=missing_webhook_url")
+    elif kind == "service":
+        service_url = os.getenv("NOTIFICATION_SERVICE_URL")
+        if service_url:
+            return NotificationServiceClient(service_url)
+        logger.warning("event=notifier_fallback reason=missing_service_url")
     elif kind == "log":
         return LoggingNotifier()
     elif kind != "none":
