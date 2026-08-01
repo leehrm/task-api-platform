@@ -2,6 +2,85 @@
 
 기존 Task API의 완료 알림 책임을 실제 Notification Service workload로 분리하기 위해 추가·변경한 애플리케이션 코드를 정리함. 파일별 변경 목적, 요청 흐름, 설정, 오류 처리와 검증 범위를 설명함.
 
+## 12살도 이해할 수 있는 설명
+
+Task API를 **할 일 완료를 확인하는 선생님**, Slack을 **완료 소식을 받는 게시판**이라고 생각할 수 있음.
+
+기존에는 선생님이 할 일을 완료로 표시한 뒤 게시판에 직접 소식을 붙였음.
+
+```text
+선생님(Task API)
+  -> 완료 확인
+  -> 게시판(Slack)에 직접 알림
+```
+
+이 과정은 한 교실 안에서 모두 일어나므로 복도에서 이동을 세는 Kiali는 선생님이 알림을 보냈다는 사실을 별도 이동 경로로 볼 수 없음.
+
+Notification Service를 추가한 뒤에는 **알림 전달 담당자**가 별도 교실에서 일함. 선생님은 할 일 번호와 제목만 적은 쪽지를 전달 담당자에게 보내고, 전달 담당자가 Slack 게시판에 알림을 붙임.
+
+```text
+선생님(Task API)
+  -> 완료 상태를 먼저 기록
+  -> 할 일 번호와 제목을 쪽지로 전달
+  -> 알림 담당자(Notification Service)
+  -> 게시판(Slack)에 알림
+```
+
+두 교실 입구에는 Envoy라는 경비원이 있음. 경비원끼리 쪽지를 전달할 때 내용을 암호화하고 상대방이 허가된 교실인지 확인함. Kiali는 경비원들이 기록한 이동 횟수와 걸린 시간, 실패 여부를 읽어 화면에 선으로 표시함.
+
+알림 담당자가 잠시 고장 나더라도 선생님이 이미 기록한 할 일 완료 상태는 그대로 남음. 완료 알림만 실패 기록으로 남으며 task를 미완료 상태로 되돌리지 않음.
+
+기존 Task API는 계속 Slack에 직접 알림을 보냄. 비교용 Istio Task API만 Notification Service를 거치므로 두 방식을 동시에 비교할 수 있음.
+
+## 기술적으로 다시 설명
+
+기존 알림은 `TaskService`가 같은 Python process 안의 `SlackNotifier.task_completed()`를 호출하는 in-process method call이었음. Network 연결이 발생하지 않으므로 Envoy telemetry와 Kiali traffic graph에는 별도 service edge가 생성되지 않음.
+
+비교용 Task API는 `NotificationServiceClient`가 Kubernetes cluster 내부 HTTP로 `POST /notifications/task-completed`를 호출함. `app.notification_main:app`을 실행하는 별도 FastAPI process가 요청을 검증하고 `SlackNotifier`로 Slack webhook을 호출함. 두 application은 별도 Kubernetes Deployment, Pod, Service와 workload identity를 사용함.
+
+Task API와 Notification Service Pod에 주입된 Envoy sidecar가 application의 HTTP traffic을 가로채 workload 사이에서는 Istio mTLS로 전달함. Application code는 일반 HTTP만 사용하고 인증서 발급, TLS handshake와 암호화는 Istio와 Envoy가 처리함.
+
+Envoy가 요청량, 응답 status와 latency metric을 생성하고 Prometheus가 이를 저장함. Kiali는 Prometheus의 Istio telemetry를 조회해 `argo-task-api-istio -> notification-service` edge와 오류율, latency, mTLS 상태를 표시함.
+
+Task 상태는 repository에서 DB commit된 뒤 Notification Service를 호출함. 내부 HTTP 또는 Slack 호출이 실패하면 `NotificationServiceClient`가 failure metric과 log를 남기고 예외를 전달하지만, `TaskService`가 이를 처리해 완료된 task 상태와 API update 응답을 유지함.
+
+기존 Task API와 비교용 Task API는 같은 code artifact를 사용함. `NOTIFIER=slack`은 Slack 직접 호출을 선택하고 `NOTIFIER=service`는 Notification Service 호출을 선택함. Istio SDK나 TLS dependency를 application에 추가하지 않음.
+
+## 설명에 필요한 용어
+
+| 용어 | 정확한 의미 | 이 구현에서의 역할 |
+|---|---|---|
+| Process | 운영체제에서 실행 중인 프로그램 한 개임 | Task API와 Notification Service가 별도 Python process로 실행됨 |
+| Module | Python code를 파일과 namespace 단위로 묶은 것임 | 기존 notifier는 `notification_service.py` module 안의 객체였으며 그 자체가 독립 network service는 아니었음 |
+| Method call | 같은 process의 객체 함수를 직접 실행하는 호출임 | 기존 `TaskService -> SlackNotifier` 호출이며 Kiali가 network edge로 볼 수 없음 |
+| Notifier | 이 프로젝트에서 완료 알림 동작을 추상화한 역할 이름임 | `SlackNotifier`, `NotificationServiceClient` 등이 같은 `task_completed()` 규약을 구현함 |
+| Protocol | Python에서 객체가 제공해야 할 method 형태를 정의하는 structural interface임 | `Notifier` protocol 덕분에 `TaskService`가 구체적인 전송 방식을 몰라도 됨 |
+| HTTP client | HTTP 요청을 만들어 server로 보내는 쪽임 | `NotificationServiceClient`가 JSON 요청을 Notification Service에 보냄 |
+| HTTP server | HTTP 요청을 받고 응답하는 프로그램임 | FastAPI 기반 Notification Service가 요청을 검증하고 Slack 전송 결과를 응답함 |
+| Endpoint | HTTP method와 URL path로 구분되는 API 접점임 | `POST /notifications/task-completed`, `GET /healthz`, `GET /readyz`를 제공함 |
+| Webhook | 특정 event를 전달받기 위해 외부 시스템이 제공하는 HTTP endpoint임 | Slack incoming webhook이 완료 메시지를 받음 |
+| Service | 독립된 책임을 network API로 제공하는 실행 단위라는 일반 용어임 | Notification Service가 완료 알림 전달 책임을 제공함 |
+| Kubernetes Service | 여러 Pod 앞에 안정적인 DNS 이름과 virtual IP를 제공하는 Kubernetes resource임 | Task API가 Pod IP를 몰라도 `notification-service.notification-service.svc.cluster.local`로 호출하게 함 |
+| Deployment | 원하는 Pod template과 replica 수를 관리하는 Kubernetes controller resource임 | Task API와 Notification Service를 서로 독립적으로 실행함 |
+| Pod | Kubernetes가 배치하는 최소 실행 단위이며 하나 이상의 container가 network를 공유함 | application과 Envoy sidecar가 같은 Pod에서 실행됨 |
+| Workload | Kubernetes 또는 Istio가 실행·관리·관찰하는 application 단위임 | Task API와 Notification Service가 서로 다른 workload로 식별됨 |
+| Workload identity | Mesh 안에서 요청을 보낸 workload가 누구인지 나타내는 신원임 | Istio가 Kubernetes ServiceAccount를 기반으로 Task API의 호출 권한을 확인함 |
+| Sidecar | 주 application과 같은 Pod에서 network 같은 보조 기능을 제공하는 container임 | Envoy가 application inbound·outbound traffic을 처리하며, 현재 Istio `1.30.3`에서는 `.spec.initContainers`에 `restartPolicy: Always`인 Kubernetes native sidecar로 표시됨 |
+| Envoy | Istio가 data plane proxy로 사용하는 network proxy임 | HTTP 전달, mTLS와 telemetry 생성을 담당함 |
+| Service mesh | 여러 service 사이의 통신을 application code 밖의 공통 network 계층에서 관리하는 구조임 | Istio가 routing, 보안과 관측 기능을 제공함 |
+| Istio | Envoy를 이용해 service mesh를 구성하는 platform임 | Sidecar 설정, workload 인증서와 접근 정책을 관리함 |
+| mTLS | Client와 server 양쪽이 인증서를 제시해 서로의 신원을 확인하고 통신을 암호화하는 TLS 방식임 | Task API Envoy와 Notification Service Envoy 사이 연결을 인증하고 암호화함 |
+| Telemetry | 시스템 동작을 관찰하기 위해 수집하는 metric, log, trace를 통칭함 | Envoy가 service 간 요청 metric을 생성함 |
+| Metric | 요청 수나 오류 수처럼 숫자로 측정한 시계열 데이터임 | Prometheus가 저장하고 Kiali가 traffic graph 계산에 사용함 |
+| Prometheus | HTTP endpoint를 주기적으로 조회해 시계열 metric을 수집하고 저장하는 monitoring system임 | Envoy metric을 저장해 Kiali가 조회할 수 있게 함 |
+| Kiali | Istio 설정과 Prometheus metric을 조회해 mesh topology와 traffic 상태를 보여 주는 UI임 | 두 workload 사이 edge, 오류율, latency와 mTLS 상태를 표시함 |
+| DB transaction과 commit | 여러 DB 작업을 하나의 논리 단위로 처리하고 성공 결과를 확정하는 과정임 | Task 상태를 먼저 확정한 뒤 알림을 호출해 알림 실패가 완료 상태를 되돌리지 않게 함 |
+| Environment variable | Process 시작 시 외부에서 주입하는 key-value 설정값임 | `NOTIFIER`, `NOTIFICATION_SERVICE_URL`, `NOTIFY_WEBHOOK_URL`로 실행 동작을 선택함 |
+| Timeout | 외부 작업의 응답을 기다리는 최대 시간임 | 내부 HTTP와 Slack 호출을 기본 2초까지만 기다림 |
+| Retry | 실패한 작업을 다시 시도하는 동작임 | 중복 알림 위험을 피하기 위해 현재 자동 retry를 사용하지 않음 |
+| Best-effort | 성공을 시도하지만 실패 시 전체 business transaction을 되돌리거나 전달을 보장하지 않는 방식임 | 알림 실패가 task 완료 상태를 되돌리지 않음 |
+| Transactional outbox | DB transaction과 함께 event를 저장한 뒤 별도 worker가 전송해 전달 신뢰성을 높이는 pattern임 | 현재 범위에서는 제외했으며 보장 전달이 필요할 때 검토함 |
+
 ## 구현 목적
 
 기존 알림 흐름은 Task API 프로세스 내부의 Python 객체 호출이었음.
